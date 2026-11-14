@@ -135,6 +135,8 @@ def main():
         f"mg{config.mipgap}",
         f"nc{config.num_class}"
     ]
+    if config.seed_in_name:
+        components.append(f"seed{config.seed}")
     name = "_".join(components)
     folder = f"{config.policy}_{name}/"
     instance_name = f"Instances_N{config.ocs_param['N1']}-{config.ocs_param['N2']}_s{config.ocs_param['sigma1']}-{config.ocs_param['sigma2']}_P{config.ocs_param['P']}_I{config.ocs_param['I']}_L{config.ocs_param['L']}_{config.ocs_param['k_min']}_{config.ocs_param['k_max']}_{config.ocs_param['physician_weights']}_{config.ocs_param['c_miss_1']}_{config.ocs_param['c_miss_2']}_{config.ocs_param['co']}_{config.ocs_param['cnp']}"
@@ -225,7 +227,7 @@ def main():
             sim[i].generate_instance()
             learner[i].set_scenarios(1000 + n * 100 + i, asdict(config))
     
-        with get_context("spawn").Pool(min(config.runs, 10)) as pool:
+        with get_context("spawn").Pool(min(config.runs, config.workers)) as pool:
             # Add progress bar for pool mapping
             results = list(tqdm(
                 pool.starmap(
