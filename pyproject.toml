@@ -12,6 +12,7 @@ dependencies = ["numpy", "torch"]
 
 [project.optional-dependencies]
 test = ["pytest"]
+analysis = ["pandas", "scipy", "matplotlib"]
 
 [tool.setuptools]
 packages = ["udagger"]

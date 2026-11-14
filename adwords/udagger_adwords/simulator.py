@@ -16,7 +16,7 @@ import numpy as np
 from scipy.special import gammaln
 from scipy.stats import beta as beta_dist
 
-from udagger_adwords.market import PREMIUM, REGULAR, Episode, Market
+from udagger_adwords.instance import PREMIUM, REGULAR, Episode, Market
 
 SKIP = 0
 

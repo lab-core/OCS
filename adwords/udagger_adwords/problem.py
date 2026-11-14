@@ -6,9 +6,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from udagger_adwords.env import Simulator, State, feasible_mask
+from udagger_adwords.simulator import Simulator, State, feasible_mask
 from udagger_adwords.features import features
-from udagger_adwords.market import PREMIUM, REGULAR, Market, sample_episode
+from udagger_adwords.instance import PREMIUM, REGULAR, Market, sample_episode
 
 
 class AdwordsEpisode:

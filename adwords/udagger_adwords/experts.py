@@ -17,13 +17,14 @@ The experts follow the taxonomy of the paper (treatment of uncertainty):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 from udagger import Label, aggregate_votes, one_hot
+from udagger.experts import ExpertSpec
 
-from udagger_adwords.env import SKIP, State, feasible_mask, sample_future_counts
-from udagger_adwords.market import Market
+from udagger_adwords.simulator import SKIP, State, feasible_mask, sample_future_counts
+from udagger_adwords.instance import Market
 from udagger_adwords.solver import solve_count_mip
 
 if TYPE_CHECKING:
@@ -37,37 +38,10 @@ def _rel_gap(obj: float, bound: float) -> float:
 
 
 @dataclass
-class Expert:
-    """A configurable expert.
+class Expert(ExpertSpec):
+    """An AdWords expert (settings in :class:`udagger.experts.ExpertSpec`)."""
 
-    Attributes:
-        kind: One of ``EXPERT_KINDS``.
-        n_scenarios: Number of scenarios for ``agg`` and ``saa``.
-        mip_gap: Relative MIP gap stopping criterion.
-        time_limit: Time limit per MIP in seconds.
-        sample_vote: Whether the aggregated expert acts by sampling from its
-            votes (as in the physician study) instead of taking the majority.
-    """
-
-    kind: str
-    n_scenarios: int = 1
-    mip_gap: float = 0.0
-    time_limit: float = 10.0
-    sample_vote: bool = False
-
-    def __post_init__(self) -> None:
-        """Validate the configuration."""
-        if self.kind not in EXPERT_KINDS:
-            raise ValueError(f"unknown expert {self.kind!r}")
-        if self.kind in ("full", "det"):
-            self.n_scenarios = 1
-
-    @property
-    def name(self) -> str:
-        """Short identifier used in file names and tables."""
-        if self.kind in ("agg", "saa"):
-            return f"{self.kind}{self.n_scenarios}"
-        return self.kind
+    KINDS: ClassVar[tuple[str, ...]] = EXPERT_KINDS
 
     def __call__(
         self, episode: AdwordsEpisode, state: State, rng: np.random.Generator

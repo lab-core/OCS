@@ -1,4 +1,4 @@
-"""Instance parameters, model construction and episode seeds.
+"""Instance parameters, episode seeds and arguments of the PPA models.
 
 The defaults are those of the original study (``legacy/utility.py``): 4
 physicians with 20 appointments, N(25, 5) priority-1 and N(75, 12)
@@ -12,9 +12,6 @@ import atexit
 import shutil
 import tempfile
 from dataclasses import dataclass
-
-from udagger_ppa.scheduler import AppointmentScheduler
-from udagger_ppa.stochastic import SAppointmentScheduler
 
 # Episode seeds, as in the original evaluation: test 5001 + n, validation
 # 6001 + n; training episodes of replicate r are 10**6 * (r + 1) + i.
@@ -79,7 +76,8 @@ def _tmp_dir() -> str:
     return _TMP[0]
 
 
-def _common(inst: Instance, seed: int, time_limit: float, mipgap: float) -> dict:
+def model_kwargs(inst: Instance, seed: int, time_limit: float, mipgap: float) -> dict:
+    """Constructor arguments of the simulator and of the MIP models."""
     return {
         "n_patients1": inst.n1,
         "sigma1": inst.sigma1,
@@ -103,30 +101,6 @@ def _common(inst: Instance, seed: int, time_limit: float, mipgap: float) -> dict
         "out_dir": _tmp_dir(),
         "suffix": False,
     }
-
-
-def make_scheduler(
-    inst: Instance, seed: int, time_limit: float = 30.0, mipgap: float = 0.02
-) -> AppointmentScheduler:
-    """Simulator and deterministic model, built as in the original scripts."""
-    sched = AppointmentScheduler(**_common(inst, seed, time_limit, mipgap))
-    sched.setup_solver()
-    return sched
-
-
-def make_stochastic(
-    inst: Instance,
-    seed: int,
-    n_scenarios: int,
-    time_limit: float = 30.0,
-    mipgap: float = 0.02,
-) -> SAppointmentScheduler:
-    """Two-stage stochastic model with ``n_scenarios`` scenarios."""
-    sched = SAppointmentScheduler(
-        **_common(inst, seed, time_limit, mipgap), num_scenarios=n_scenarios
-    )
-    sched.setup_solver()
-    return sched
 
 
 def split_seeds(split: str, n: int, run_seed: int = 0) -> list[int]:

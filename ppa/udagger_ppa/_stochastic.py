@@ -23,7 +23,7 @@ from pyomo.environ import ConcreteModel, Constraint, Var, Objective, Set
 from pyomo.environ import Binary, minimize, NonNegativeReals, value
 from pyomo.opt import SolverFactory
 from typing import Optional
-from udagger_ppa.scheduler import AppointmentScheduler, Patient
+from udagger_ppa._scheduler import AppointmentScheduler, Patient
 
 
 class SAppointmentScheduler:

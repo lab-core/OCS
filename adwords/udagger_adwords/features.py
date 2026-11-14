@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from udagger_adwords.env import State, feasible_mask
-from udagger_adwords.market import Market
+from udagger_adwords.simulator import State, feasible_mask
+from udagger_adwords.instance import Market
 
 
 def features(market: Market, state: State) -> np.ndarray:

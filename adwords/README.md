@@ -26,17 +26,17 @@ queries of each type, so every MIP expert solves a compact type-count model
 
 | Path | Content |
 |---|---|
-| `udagger_adwords/market.py` | instance generator and episode sampling |
-| `udagger_adwords/env.py` | simulator and Bayesian posterior on the remaining queries |
+| `udagger_adwords/instance.py` | market generator, episode sampling and seeds |
+| `udagger_adwords/simulator.py` | simulator and Bayesian posterior on the remaining queries |
 | `udagger_adwords/solver.py` | type-count MIPs (Gurobi) and hindsight optimum |
-| `udagger_adwords/experts.py` | greedy, MSVV, full-information, deterministic, aggregated, two-stage |
 | `udagger_adwords/features.py` | state features of the learned policy |
+| `udagger_adwords/experts.py` | greedy, MSVV, full-information, deterministic, aggregated, two-stage |
 | `udagger_adwords/problem.py` | the AdWords problem and its episodes for `udagger` |
-| `udagger_adwords/cli.py` | `hindsight`, `expert` and `learn` commands (learning with `udagger`) |
+| `udagger_adwords/cli.py` | the application for the generic command line (`udagger.cli`) |
 | `slurm/make_grid.py` | experiment grids (run with the shared `../slurm/array.sh`) |
-| `analysis/make_results.py` | tables and figures of the paper |
+| `analysis/make_results.py` | tables and figures of the paper (with `udagger.analysis`) |
 | `scripts/calibrate.py` | calibration of the budget tightness |
-| `tests/` | unit tests |
+| `tests/` | unit tests and a regression test against the pre-refactor results |
 
 ## Installation
 

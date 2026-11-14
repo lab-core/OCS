@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -182,3 +184,88 @@ def test_learn_rejects_empty_inputs() -> None:
 
     with pytest.raises(ValueError, match="no state was labelled"):
         learn(Runner(Silent()), OracleExpert(), LearnConfig(mode="oneshot"), [1], [2])
+
+
+def _toy_problem(args: object) -> ToyProblem:
+    return ToyProblem()
+
+
+def _toy_expert(args: object) -> OracleExpert:
+    return OracleExpert()
+
+
+def _toy_seeds(split: str, n: int, run_seed: int) -> list[int]:
+    base = {"train": 1000 * (run_seed + 1), "valid": 100, "test": 0}[split]
+    return list(range(base, base + n))
+
+
+def _toy_hindsight(args: object, seed: int) -> float:
+    return 10.0  # the oracle takes the best action at every epoch
+
+
+def test_cli_and_analysis(tmp_path: Path) -> None:
+    """Generic commands write the shared files, which the analysis reads."""
+    from udagger.analysis import Study, standard_outputs
+    from udagger.cli import Application, main
+
+    app = Application(
+        name="toy",
+        objective="score",
+        expert_kinds=("oracle",),
+        add_arguments=lambda parser: None,
+        make_problem=_toy_problem,
+        make_expert=_toy_expert,
+        seeds=_toy_seeds,
+        hindsight=_toy_hindsight,
+    )
+    out = ["--out", str(tmp_path), "--n-valid", "5", "--n-test", "5"]
+    main(app, "", [*out, "hindsight"])
+    main(app, "", [*out, "expert", "--expert", "oracle"])
+    for mode in ("oneshot", "dagger"):
+        learn = ["learn", "--expert", "oracle", "--mode", mode, "--episodes", "20"]
+        main(app, "", [*out, *learn, "--epochs", "20", "--save-data"])
+    run = tmp_path / "oracle_gap0.02_dagger_s0"
+    assert {p.name for p in run.iterdir()} >= {
+        "test.csv",
+        "test_mode.csv",
+        "test_sample.csv",
+        "test.json",
+        "policy.npz",
+        "labels.npz",
+    }
+    study = Study(
+        prefix="toy",
+        objective="score",
+        maximize=True,
+        order=["oracle"],
+        labels={"oracle": "Oracle"},
+        short={"oracle": "Oracle"},
+        colors={"oracle": "k"},
+        comparisons=((("oracle", "oneshot"), ("oracle", "dagger")),),
+        curve_experts=("oracle",),
+    )
+    table = standard_outputs(study, tmp_path, tmp_path / "paper")
+    assert table.loc[0, "online"] == pytest.approx(0.0)  # the expert is optimal
+    assert 0.0 <= table.loc[0, "oneshot"] <= 100.0
+    assert (tmp_path / "paper" / "tables" / "toy_tests.tex").exists()
+    assert (tmp_path / "paper" / "figs" / "toy_curves.pdf").exists()
+
+
+def test_grid_lines() -> None:
+    """Grid lines follow the command-line syntax."""
+    from udagger.grid import expert_lines, gap_lines, learn_lines
+
+    lines = learn_lines([("saa", 5)], range(2), 40, save_seed=0)
+    assert lines[0] == (
+        "learn --expert saa --scenarios 5 --seed 0 --mode oneshot --episodes 40"
+        " --save-data"
+    )
+    assert len(lines) == 4
+    assert gap_lines(("saa", 30), (0.1,), [3], 40) == [
+        "learn --expert saa --scenarios 30 --seed 3 --gap 0.1 --mode dagger"
+        " --episodes 40"
+    ]
+    assert expert_lines([("det", 1)], ("saa", 30), (0.002,), prefix="--x 1 ") == [
+        "--x 1 expert --expert det --scenarios 1",
+        "--x 1 expert --expert saa --scenarios 30 --gap 0.002",
+    ]

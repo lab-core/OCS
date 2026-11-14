@@ -46,14 +46,16 @@ The objective is to choose decisions over the booking horizon to **minimize the 
 
 | Path | Content |
 |---|---|
-| `udagger_ppa/instance.py` | instance parameters, model construction and episode seeds |
-| `udagger_ppa/scheduler.py` | simulator and deterministic MIP (Pyomo + Gurobi) |
-| `udagger_ppa/stochastic.py` | two-stage stochastic MIP |
+| `udagger_ppa/instance.py` | instance parameters, episode seeds and model arguments |
+| `udagger_ppa/simulator.py` | simulator (with the deterministic MIP of the original study) |
+| `udagger_ppa/solver.py` | two-stage stochastic MIP and hindsight optimum |
 | `udagger_ppa/features.py` | state features of the learned policy |
 | `udagger_ppa/experts.py` | greedy, full-information, deterministic, aggregated, two-stage |
-| `udagger_ppa/problem.py` | the PPA problem and its episodes for `udagger`, hindsight optimum |
-| `udagger_ppa/cli.py` | `hindsight`, `expert` and `learn` commands (learning with `udagger`) |
+| `udagger_ppa/problem.py` | the PPA problem and its episodes for `udagger` |
+| `udagger_ppa/cli.py` | the application for the generic command line (`udagger.cli`) |
+| `udagger_ppa/_scheduler.py`, `_stochastic.py` | original simulator and MIP classes (`OCS.py`, `SOCS.py`) |
 | `slurm/make_grid.py` | experiment grids (run with the shared `../slurm/array.sh`) |
+| `analysis/make_results.py` | tables and figures (with `udagger.analysis`) |
 | `tests/` | unit tests, including equivalence with the original code |
 | `legacy/` | original scripts of the study (see below) |
 
@@ -116,7 +118,7 @@ python Learn_Sim.py --sims 1000 --model 399 --new 1 --scenarios 5 --stoch 1 \
     --um 1 --learn_iter 400 --runs 10 --time_limit 30 --mipgap 0.02
 ```
 
-`tests/test_udagger_ppa.py` checks that the features and the expert decisions
+`tests/test_ppa.py` checks that the features and the expert decisions
 of `udagger_ppa` are identical to those of the original `IO_learning` on the
 same states and seeds.
 

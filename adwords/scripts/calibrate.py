@@ -10,7 +10,7 @@ import numpy as np
 from udagger import run_episode
 
 from udagger_adwords.experts import Expert
-from udagger_adwords.market import make_market, sample_episode
+from udagger_adwords.instance import make_market, sample_episode
 from udagger_adwords.problem import AdwordsProblem
 from udagger_adwords.solver import offline_optimum
 
@@ -27,7 +27,9 @@ def task(args: tuple) -> tuple:
     opt = offline_optimum(m, np.bincount(ep.types, minlength=m.n_types))
     out = [opt]
     for kind, k in (("greedy", 1), ("msvv", 1), ("det", 1), ("agg", 10), ("saa", 10)):
-        out.append(run_episode(AdwordsProblem(m), seed, Expert(kind, k)).objective)
+        # Settings of the calibration run: optimal MIPs, 10 s, majority vote.
+        expert = Expert(kind, k, mip_gap=0.0, time_limit=10.0, sample_vote=False)
+        out.append(run_episode(AdwordsProblem(m), seed, expert).objective)
     return out
 
 

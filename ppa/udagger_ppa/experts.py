@@ -20,13 +20,16 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import numpy as np
 from udagger import Label, aggregate_votes, one_hot
+from udagger.experts import ExpertSpec
 
 from udagger_ppa.features import blocked
-from udagger_ppa.instance import Instance, make_scheduler, make_stochastic
+from udagger_ppa.instance import Instance
+from udagger_ppa.simulator import make_scheduler
+from udagger_ppa.solver import make_stochastic
 
 if TYPE_CHECKING:
     from udagger_ppa.problem import PPAEpisode
@@ -38,32 +41,20 @@ EXPERT_SEED_OFFSET = 10**12
 
 
 @dataclass
-class Expert:
-    """A configurable expert.
+class Expert(ExpertSpec):
+    """A PPA expert (settings in :class:`udagger.experts.ExpertSpec`).
 
     Attributes:
-        kind: One of ``EXPERT_KINDS``.
         instance: Instance parameters (used to build the scenario models).
-        n_scenarios: Number of scenarios for ``agg`` and ``saa``.
-        mip_gap: Relative MIP gap stopping criterion.
-        time_limit: Time limit per MIP in seconds.
-        sample_vote: Draw the executed action from the votes (original
-            study) instead of taking the majority.
     """
 
-    kind: str
+    KINDS: ClassVar[tuple[str, ...]] = EXPERT_KINDS
+
     instance: Instance = field(default_factory=Instance)
-    n_scenarios: int = 1
-    mip_gap: float = 0.02
-    time_limit: float = 30.0
-    sample_vote: bool = True
 
     def __post_init__(self) -> None:
-        """Validate the configuration."""
-        if self.kind not in EXPERT_KINDS:
-            raise ValueError(f"unknown expert {self.kind!r}")
-        if self.kind in ("greedy", "full", "det"):
-            self.n_scenarios = 1
+        """Validate the settings; scenario models are built per episode."""
+        super().__post_init__()
         self._models: list = []
         self._episode: tuple[int, int] | None = None
 
@@ -72,13 +63,6 @@ class Expert:
         state = self.__dict__.copy()
         state.update(_models=[], _episode=None)
         return state
-
-    @property
-    def name(self) -> str:
-        """Short identifier used in file names and tables."""
-        if self.kind in ("agg", "saa"):
-            return f"{self.kind}{self.n_scenarios}"
-        return self.kind
 
     def _setup(self, episode: PPAEpisode) -> None:
         """Build the scenario models of a new episode."""

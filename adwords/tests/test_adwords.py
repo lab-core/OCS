@@ -6,14 +6,14 @@ import numpy as np
 import pytest
 from udagger import NumpyPolicy, run_episode, stack, train_policy
 
-from udagger_adwords.env import (
+from udagger_adwords.simulator import (
     Simulator,
     feasible_mask,
     remaining_count_posterior,
     sample_future_counts,
 )
 from udagger_adwords.experts import Expert
-from udagger_adwords.market import (
+from udagger_adwords.instance import (
     PREMIUM,
     REGULAR,
     Episode,
@@ -73,7 +73,7 @@ def test_hand_made_instance() -> None:
     state = sim.state()
     greedy = Expert("greedy").decide(market, state, np.random.default_rng(0))
     assert greedy.action == 1
-    full = Expert("full").decide(
+    full = Expert("full", mip_gap=0.0).decide(
         market, state, np.random.default_rng(0), sim.true_future_counts()
     )
     assert full.action == 2
@@ -85,7 +85,8 @@ def test_hindsight_dominates_online(market: Market) -> None:
         ep = sample_episode(market, np.random.default_rng(seed))
         opt = offline_optimum(market, np.bincount(ep.types, minlength=market.n_types))
         for kind, k in (("greedy", 1), ("msvv", 1), ("full", 1), ("saa", 3)):
-            rev = run_episode(AdwordsProblem(market), seed, Expert(kind, k)).objective
+            expert = Expert(kind, k, mip_gap=0.0)
+            rev = run_episode(AdwordsProblem(market), seed, expert).objective
             assert rev <= opt + 1e-6
             if kind == "full":
                 assert rev == pytest.approx(opt)

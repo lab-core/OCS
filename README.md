@@ -13,12 +13,26 @@ how the choice of the *expert* affects the learned policy.
 | [`slurm/`](slurm) | Job scripts shared by both examples (`array.sh APP GRID`) |
 | [`tests/`](tests) | Tests of the package on a toy problem |
 
-Both examples have the same structure: a package `udagger_<app>/` with the
-instance, simulator, MIP solver, `features.py`, `experts.py`, `problem.py`
-(the `udagger` interfaces) and `cli.py` (sub-commands `hindsight`, `expert`
-and `learn` with the same options and output files), plus `slurm/make_grid.py`
-and `tests/`. `ppa/legacy/` also keeps the original scripts of the
-physician study.
+Both examples have exactly the same structure:
+
+```
+<app>/udagger_<app>/
+  instance.py   instance parameters, episode generation and seeds
+  simulator.py  episode simulator
+  solver.py     MIP models and hindsight optimum
+  features.py   state features of the policy
+  experts.py    experts (subclasses of udagger.experts.ExpertSpec)
+  problem.py    Problem and Episode for udagger
+  cli.py        the Application of the generic command line
+<app>/slurm/make_grid.py   experiment grids (udagger.grid)
+<app>/analysis/            tables and figures (udagger.analysis)
+<app>/tests/
+```
+
+Run an example with `python -m udagger_<app>.cli {hindsight,expert,learn}`;
+the options and output files are the same. `adwords/scripts/` holds the
+calibration of the AdWords instance and `ppa/legacy/` the original scripts
+of the physician study.
 
 ## The `udagger` package
 
@@ -39,7 +53,11 @@ The package provides the rest:
 | `policy.py` | masked MLP, NumPy policy (sampled or most likely action), training with soft cross-entropy and warm start |
 | `rollout.py` | episodes mixing expert and policy with probability β, expert labelling, parallel `Runner` |
 | `learner.py` | `learn(runner, expert, LearnConfig(...), train_seeds, valid_seeds)` for one-shot cloning and DAgger, with selection of the best policy on validation |
-| `experiment.py` | the `learn` and `expert` commands shared by the examples (options, test of both action rules, output files) |
+| `experts.py` | `ExpertSpec`: kind, scenarios, MIP gap, time limit, vote rule and name of an expert |
+| `experiment.py` | learning and expert runs: options, test of both action rules, output files |
+| `cli.py` | generic command line: an application declares an `Application` (options, problem, expert, seeds, hindsight) |
+| `grid.py` | job lines of the experiment grids |
+| `analysis.py` | regret to the hindsight optimum, main/MIP-gap/paired-test tables, learning curves |
 
 ```python
 from udagger import LearnConfig, Runner, learn

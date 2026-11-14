@@ -7,8 +7,8 @@ import itertools
 import numpy as np
 
 from udagger_ppa.features import blocked, features
-from udagger_ppa.instance import Instance, make_scheduler
-from udagger_ppa.scheduler import AppointmentScheduler
+from udagger_ppa.instance import Instance
+from udagger_ppa.simulator import AppointmentScheduler, make_scheduler
 
 _EPISODE_IDS = itertools.count()
 
@@ -119,20 +119,3 @@ class PPAProblem:
         if self._sim is None:
             self._sim = make_scheduler(self.instance, seed)
         return PPAEpisode(self._sim, seed)
-
-
-def offline_optimum(
-    instance: Instance, seed: int, time_limit: float = 300.0
-) -> tuple[float, float | None]:
-    """Hindsight optimum of an episode (all requests known in advance).
-
-    Returns:
-        The optimal (or best found) cost and the final MIP gap in %.
-    """
-    sim = make_scheduler(instance, seed, time_limit=time_limit, mipgap=0.0)
-    sim.set_seed(seed)
-    sim.generate_instance()
-    sim.build_model(sim.patients)
-    _, _, gap, _ = sim.solve(tee=False)
-    _, cost = sim.extract_solution(sim.patients)
-    return float(cost), gap

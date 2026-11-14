@@ -1,5 +1,5 @@
 hindsight
-expert --expert greedy
+expert --expert greedy --scenarios 1
 expert --expert full --scenarios 1
 expert --expert det --scenarios 1
 expert --expert agg --scenarios 5

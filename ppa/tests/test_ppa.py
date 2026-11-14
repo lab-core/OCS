@@ -26,7 +26,8 @@ from udagger import run_episode, stack  # noqa: E402
 from udagger_ppa.experts import EXPERT_SEED_OFFSET, Expert  # noqa: E402
 from udagger_ppa.features import features  # noqa: E402
 from udagger_ppa.instance import Instance, split_seeds  # noqa: E402
-from udagger_ppa.problem import PPAProblem, offline_optimum  # noqa: E402
+from udagger_ppa.problem import PPAProblem  # noqa: E402
+from udagger_ppa.solver import offline_optimum  # noqa: E402
 
 LEGACY = str(Path(__file__).resolve().parents[1] / "legacy")
 

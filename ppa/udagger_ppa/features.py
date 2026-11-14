@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from udagger_ppa.scheduler import AppointmentScheduler
+from udagger_ppa.simulator import AppointmentScheduler
 
 _EPS = 1e-9
 
