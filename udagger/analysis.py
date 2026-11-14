@@ -84,7 +84,10 @@ def load(
 
     Returns:
         ``experts`` (one row per expert and gap), ``runs`` (one row per
-        learning run) and ``curves`` (one row per trained policy).
+        learning run) and ``curves`` (one row per trained policy). Test
+        regrets are means of per-episode regrets; the validation regret of
+        the curves compares the mean validation objective with the mean
+        hindsight value (only means are stored during learning).
     """
     opt = _hindsight(results, "test")
     opt_val = _hindsight(results, "valid").mean()
@@ -116,6 +119,7 @@ def load(
             dm = pd.read_csv(mode_path).set_index("seed")
             reg_mode = regret(dm[col], opt.loc[dm.index], mx).mean()
         key = {k: meta[k] for k in ("expert", "gap", "mode", "seed")}
+        key["tag"] = meta.get("options", {}).get("tag", "")
         runs.append(
             {
                 **key,
@@ -235,6 +239,7 @@ def main_table(
     tables = out / "tables"
     (tables / f"{study.prefix}_main.tex").write_text("\n".join(lines) + "\n")
     table = pd.DataFrame(rows)
+    table["metric"] = "regret"  # percent; the original PPA analysis wrote costs
     table.to_csv(tables / f"{study.prefix}_main.csv", index=False)
     return table
 
@@ -281,6 +286,8 @@ def episode_regret(
     opt = _hindsight(results, "test")
     per_seed = []
     for path in sorted(results.glob(f"{expert}_gap{gap:g}_{mode}_s*/test.csv")):
+        if not path.parent.name.rsplit("_s", 1)[-1].isdigit():
+            continue  # a --tag variant
         df = pd.read_csv(path).set_index("seed")
         per_seed.append(regret(df[study.objective], opt.loc[df.index], study.maximize))
     if not per_seed:
@@ -382,6 +389,9 @@ def standard_outputs(study: Study, results: Path, out: Path) -> pd.DataFrame:
     (out / "tables").mkdir(parents=True, exist_ok=True)
     (out / "figs").mkdir(parents=True, exist_ok=True)
     experts, runs, curves = load(results, study)
+    # Runs saved under a --tag are variants, not replicates of the main study.
+    runs = runs[runs["tag"] == ""] if not runs.empty else runs
+    curves = curves[curves["tag"] == ""] if not curves.empty else curves
     print(summary(experts, runs))
     table = main_table(study, experts, runs, out)
     gap_table(study, experts, runs, out)

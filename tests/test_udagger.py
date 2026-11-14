@@ -244,6 +244,14 @@ def test_cli_and_analysis(tmp_path: Path) -> None:
         comparisons=((("oracle", "oneshot"), ("oracle", "dagger")),),
         curve_experts=("oracle",),
     )
+    # A variant under --tag must not be averaged with the main runs.
+    variant = ["learn", "--expert", "oracle", "--mode", "dagger", "--episodes", "20"]
+    main(app, "", [*out, *variant, "--epochs", "1", "--tag", "_v"])
+    from udagger.analysis import episode_regret, load
+
+    _, runs, _ = load(tmp_path, study)
+    assert sorted(runs["tag"]) == ["", "", "_v"]
+    assert len(episode_regret(study, tmp_path, "oracle", "dagger", 0.02)) == 5
     table = standard_outputs(study, tmp_path, tmp_path / "paper")
     assert table.loc[0, "online"] == pytest.approx(0.0)  # the expert is optimal
     assert 0.0 <= table.loc[0, "oneshot"] <= 100.0
@@ -310,3 +318,16 @@ def test_learn_refuses_to_overwrite_other_options(tmp_path: Path) -> None:
         main(app, "", [*base, "--epochs", "3"])
     main(app, "", [*base, "--epochs", "3", "--tag", "_e3"])
     assert (tmp_path / "oracle_gap0.02_oneshot_s0_e3" / "test.json").exists()
+
+
+def test_invalid_sizes_are_ignored() -> None:
+    """Non-positive one-shot sizes are ignored, not used as slices."""
+    res = learn(
+        Runner(ToyProblem()),
+        OracleExpert(),
+        LearnConfig(mode="oneshot", sizes=[0, -3, 5], epochs=2),
+        train_seeds=list(range(100, 110)),
+        valid_seeds=[0],
+        log=lambda line: None,
+    )
+    assert [r["episodes"] for r in res.curve] == [5, 10]

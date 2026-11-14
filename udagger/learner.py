@@ -177,7 +177,8 @@ def learn(
         data_all = stack(results)
         if not data_all:
             raise ValueError("no state was labelled by the expert")
-        sizes = sorted({int(s) for s in cfg.sizes if s <= n_episodes} | {n_episodes})
+        sizes = {int(s) for s in cfg.sizes if 0 < s <= n_episodes}
+        sizes = sorted(sizes | {n_episodes})
         for size in sizes:
             keep = np.isin(data_all["episode"], train_seeds[:size])
             data = {k: v[keep] for k, v in data_all.items()}

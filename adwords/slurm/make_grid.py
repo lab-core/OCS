@@ -38,7 +38,8 @@ def main() -> None:
     """Write the main, expert and uncertainty grids next to this script."""
     learn = learn_lines(EXPERTS, SEEDS, EPISODES)
     learn += gap_lines(GAP_EXPERT, EXTRA_GAPS, SEEDS, EPISODES)
-    experts = expert_lines(EXPERTS, GAP_EXPERT, (BASELINE_GAP, *EXTRA_GAPS))
+    experts = ["hindsight"]
+    experts += expert_lines(EXPERTS, GAP_EXPERT, (BASELINE_GAP, *EXTRA_GAPS))
     std = []
     for level in PREMIUM_STDS:
         # Global options first: each level writes to its own directory.

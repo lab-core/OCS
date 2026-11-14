@@ -197,13 +197,18 @@ def fig_teacher(table: pd.DataFrame, out: Path) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(9.0, 3.0))
     ax = axes[0]
     ppa_oneshot, ppa_dagger, ppa_online = PPA_ONESHOT, PPA_DAGGER, PPA_ONLINE
+    regret_units = False
     ppa_csv = out / "tables" / "ppa_main.csv"
     if ppa_csv.exists():
-        # Rerun of the physician study (ppa/analysis/make_results.py).
+        # Rerun of the physician study: costs (legacy/analysis) or regrets in %
+        # (ppa/analysis, column metric = "regret").
         ppa = pd.read_csv(ppa_csv).set_index("expert")
+        regret_units = "metric" in ppa and (ppa["metric"] == "regret").all()
         ppa_oneshot = ppa["oneshot"].dropna().to_dict()
         ppa_dagger = ppa["dagger"].dropna().to_dict()
         ppa_online = ppa["online"].dropna().to_dict()
+        if regret_units:
+            ppa_online["full"] = 0.0  # the hindsight optimum has no regret
     names = [n for n in EXPERT_ORDER if n in ppa_oneshot and n in ppa_dagger]
     x = np.arange(len(names))
     ax.bar(
@@ -216,6 +221,7 @@ def fig_teacher(table: pd.DataFrame, out: Path) -> None:
         color=[COLORS[n] for n in names],
         label="DAgger",
     )
+    offset = 0.3 if regret_units else 15.0  # label above its line
     for key, style, text in (
         ("full", ":", "hindsight"),
         ("saa30", "--", "2S-30 online"),
@@ -223,12 +229,19 @@ def fig_teacher(table: pd.DataFrame, out: Path) -> None:
         if key in ppa_online:
             ax.axhline(ppa_online[key], color=COLORS[key], ls=style, lw=1)
             ax.text(
-                len(names) - 0.5, ppa_online[key] + 15, text, ha="right", fontsize=7
+                len(names) - 0.5,
+                ppa_online[key] + offset,
+                text,
+                ha="right",
+                fontsize=7,
             )
     ax.set_xticks(x, [SHORT[n] for n in names], fontsize=8)
-    low = min([*ppa_online.values(), *ppa_dagger.values()])
-    ax.set_ylim(0.9 * low, 1.05 * max(ppa_oneshot.values()))
-    ax.set_ylabel("average cost (lower is better)", fontsize=8)
+    if regret_units:
+        ax.set_ylabel("regret w.r.t. hindsight (%)", fontsize=8)
+    else:
+        low = min([*ppa_online.values(), *ppa_dagger.values()])
+        ax.set_ylim(0.9 * low, 1.05 * max(ppa_oneshot.values()))
+        ax.set_ylabel("average cost (lower is better)", fontsize=8)
     ax.set_title("(a) PPA: learned policies", fontsize=9)
     ax.legend(fontsize=7, loc="upper right", frameon=False)
 

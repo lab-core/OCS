@@ -95,8 +95,10 @@ job script (results in `$UDAGGER_OUT/ppa`, by default `~/scratch/udagger/ppa`):
 
 ```bash
 python ppa/slurm/make_grid.py
-sbatch --array=1-14 --time=3-00:00:00 slurm/array.sh ppa ppa/slurm/expert_grid.txt
-sbatch --array=1-57 --time=7-00:00:00 slurm/array.sh ppa ppa/slurm/learn_grid.txt
+# MIPs use 2 threads: one worker per 2 cores.
+export UDAGGER_WORKERS=16
+sbatch --array=1-14 --time=3-00:00:00 --mem-per-cpu=4G slurm/array.sh ppa ppa/slurm/expert_grid.txt
+sbatch --array=1-57 --time=7-00:00:00 --mem-per-cpu=4G slurm/array.sh ppa ppa/slurm/learn_grid.txt
 ```
 
 ## Original scripts (`legacy/`)

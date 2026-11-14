@@ -92,44 +92,53 @@ def cmd_expert(app: Application, args: argparse.Namespace) -> None:
     """Evaluate an expert used directly as an online policy."""
     expert = app.make_expert(args)
     runner = Runner(app.make_problem(args), args.workers)
-    summary = evaluate_expert(
-        runner,
-        expert,
-        app.seeds("test", args.n_test, 0),
-        Path(args.out),
-        tag=f"{expert.name}_gap{args.gap:g}",
-        objective=app.objective,
-        meta={"expert": expert.name, "gap": args.gap},
-    )
-    runner.close()
+    try:
+        summary = evaluate_expert(
+            runner,
+            expert,
+            app.seeds("test", args.n_test, 0),
+            Path(args.out),
+            tag=f"{expert.name}_gap{args.gap:g}",
+            objective=app.objective,
+            meta={"expert": expert.name, "gap": args.gap},
+        )
+    finally:
+        runner.close()
     print(json.dumps(summary))
 
 
 def cmd_learn(app: Application, args: argparse.Namespace) -> None:
     """Learn a policy from an expert with one-shot cloning or DAgger."""
     expert = app.make_expert(args)
-    runner = Runner(app.make_problem(args), args.workers)
     tag = f"{expert.name}_gap{args.gap:g}_{args.mode}_s{args.seed}{args.tag}"
-    options = {k: v for k, v in vars(args).items() if k not in ("func", "workers")}
+    options = {k: v for k, v in vars(args).items() if k not in _NOT_EXPERIMENT}
     _check_overwrite(Path(args.out) / tag / "test.json", options)
-    run_learning(
-        runner,
-        expert,
-        args,
-        train_seeds=app.seeds("train", args.episodes, args.seed),
-        valid_seeds=app.seeds("valid", args.n_valid, 0),
-        test_seeds=app.seeds("test", args.n_test, 0),
-        out=Path(args.out) / tag,
-        objective=app.objective,
-        meta={
-            "expert": expert.name,
-            "kind": getattr(expert, "kind", expert.name),
-            "scenarios": getattr(expert, "n_scenarios", 1),
-            "gap": args.gap,
-            "options": options,
-        },
-    )
-    runner.close()
+    runner = Runner(app.make_problem(args), args.workers)
+    try:
+        run_learning(
+            runner,
+            expert,
+            args,
+            train_seeds=app.seeds("train", args.episodes, args.seed),
+            valid_seeds=app.seeds("valid", args.n_valid, 0),
+            test_seeds=app.seeds("test", args.n_test, 0),
+            out=Path(args.out) / tag,
+            objective=app.objective,
+            meta={
+                "expert": expert.name,
+                "kind": getattr(expert, "kind", expert.name),
+                "scenarios": getattr(expert, "n_scenarios", 1),
+                "gap": args.gap,
+                "options": options,
+            },
+        )
+    finally:
+        runner.close()
+
+
+# Options that do not change the experiment (where results go, parallelism,
+# whether labels are saved): ignored when comparing runs.
+_NOT_EXPERIMENT = ("func", "workers", "out", "out_suffix", "save_data")
 
 
 def _check_overwrite(summary: Path, options: dict) -> None:

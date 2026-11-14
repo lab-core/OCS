@@ -74,10 +74,10 @@ repository root with the shared job script (results in
 
 ```bash
 python adwords/slurm/make_grid.py
-sbatch --array=1-14 --time=3:00:00 slurm/array.sh adwords adwords/slurm/expert_grid.txt
+sbatch --array=1-15 --time=3:00:00 slurm/array.sh adwords adwords/slurm/expert_grid.txt
 # One-shot runs are the odd lines and DAgger runs the even lines (then 101-115).
 sbatch --array=1-99:2 --time=3:00:00 slurm/array.sh adwords adwords/slurm/learn_grid.txt
-sbatch --array=2-100:2,101-115 slurm/array.sh adwords adwords/slurm/learn_grid.txt
+sbatch --array=2-100:2,101-115 --time=3-00:00:00 slurm/array.sh adwords adwords/slurm/learn_grid.txt
 sbatch --array=1-62 --time=3:00:00 slurm/array.sh adwords adwords/slurm/std_grid.txt
 ```
 

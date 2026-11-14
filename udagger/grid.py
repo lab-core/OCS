@@ -43,13 +43,17 @@ def learn_lines(
 
 
 def gap_lines(
-    expert: tuple[str, int], gaps: Iterable[float], seeds: Iterable[int], episodes: int
+    expert: tuple[str, int],
+    gaps: Iterable[float],
+    seeds: Iterable[int],
+    episodes: int,
+    prefix: str = "",
 ) -> list[str]:
     """DAgger runs of one expert at several MIP gaps."""
     kind, k = expert
     seeds = list(seeds)
     return [
-        f"learn --expert {kind} --scenarios {k} --seed {seed} --gap {gap} "
+        f"{prefix}learn --expert {kind} --scenarios {k} --seed {seed} --gap {gap} "
         f"--mode dagger --episodes {episodes}"
         for gap in gaps
         for seed in seeds
