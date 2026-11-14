@@ -269,3 +269,44 @@ def test_grid_lines() -> None:
         "--x 1 expert --expert det --scenarios 1",
         "--x 1 expert --expert saa --scenarios 30 --gap 0.002",
     ]
+
+
+def test_in_process_runners_are_independent() -> None:
+    """Two runners with workers=1 each run their own problem."""
+
+    class Constant(ToyProblem):
+        def __init__(self, value: float) -> None:
+            self.value = value
+
+        def episode(self, seed: int) -> ToyEpisode:
+            ep = ToyEpisode(seed)
+            ep.stats = lambda: {"objective": self.value}
+            return ep
+
+    first, second = Runner(Constant(1.0)), Runner(Constant(2.0))
+    assert first.run([0], expert=OracleExpert())[0].objective == 1.0
+    assert second.run([0], expert=OracleExpert())[0].objective == 2.0
+
+
+def test_learn_refuses_to_overwrite_other_options(tmp_path: Path) -> None:
+    """A run folder is not overwritten by a run with other options."""
+    from udagger.cli import Application, main
+
+    app = Application(
+        name="toy",
+        objective="score",
+        expert_kinds=("oracle",),
+        add_arguments=lambda parser: None,
+        make_problem=_toy_problem,
+        make_expert=_toy_expert,
+        seeds=_toy_seeds,
+        hindsight=_toy_hindsight,
+    )
+    base = ["--out", str(tmp_path), "--n-valid", "2", "--n-test", "2", "learn"]
+    base += ["--expert", "oracle", "--episodes", "5"]
+    main(app, "", [*base, "--epochs", "2"])
+    main(app, "", [*base, "--epochs", "2"])  # same options: allowed
+    with pytest.raises(SystemExit):
+        main(app, "", [*base, "--epochs", "3"])
+    main(app, "", [*base, "--epochs", "3", "--tag", "_e3"])
+    assert (tmp_path / "oracle_gap0.02_oneshot_s0_e3" / "test.json").exists()

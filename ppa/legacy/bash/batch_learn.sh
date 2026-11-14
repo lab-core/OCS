@@ -5,7 +5,7 @@
 #SBATCH --time=47:00:00
 #SBATCH --partition=optimum
 #SBATCH --array=1-1
-#SBATCH --output=../Loutput/arrayjob_%A_%a.out
+#SBATCH --output=../../Loutput/arrayjob_%A_%a.out
 #SBATCH --begin=now+0hour
 
 module load gurobi/11.0.0
@@ -50,7 +50,7 @@ for scen in 30
 
         	if [ $SLURM_ARRAY_TASK_ID -eq $i ]
 		then
-	    		python ../Learn_Main.py  --N1 $N1 --s1 $s1 --N2 $N2 --s2 $s2 --P $P --I 8 --L 20 --adapter $adapter --var $var --kmin $kmin --kmax $P --pw $pw  --cnp 10 --co 0  --runs $runs --new $new  --scenarios $scen --stoch $stoch --um $um --learn_iter $li  --resume $cont --use_weight $w --lm $lm --time_limit $tl --vanilla $vanilla --gated $gated --evolve_expert 0 --mipgap $mg > ../Loutput/output$li$P$s1$tl$mg$scen$new$stoch$runs.txt	
+	    		(cd .. && python Learn_Main.py  --N1 $N1 --s1 $s1 --N2 $N2 --s2 $s2 --P $P --I 8 --L 20 --adapter $adapter --var $var --kmin $kmin --kmax $P --pw $pw  --cnp 10 --co 0  --runs $runs --new $new  --scenarios $scen --stoch $stoch --um $um --learn_iter $li  --resume $cont --use_weight $w --lm $lm --time_limit $tl --vanilla $vanilla --gated $gated --evolve_expert 0 --mipgap $mg > ../Loutput/output$li$P$s1$tl$mg$scen$new$stoch$runs.txt)
 	    		
 		fi
 	    	(( i = $i +1 ))

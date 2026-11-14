@@ -58,9 +58,10 @@ def seeds(split: str, n: int, run_seed: int) -> list[int]:
     return split_seeds(split, n, run_seed=run_seed)
 
 
-def hindsight(args: argparse.Namespace, seed: int) -> float:
-    """Offline optimum (cost) of an episode."""
-    return offline_optimum(instance(args), seed, args.time_limit)[0]
+def hindsight(args: argparse.Namespace, seed: int) -> tuple[float, float | None]:
+    """Offline optimum (cost) of an episode and its final relative MIP gap."""
+    cost, gap = offline_optimum(instance(args), seed, args.time_limit)
+    return cost, None if gap is None else gap / 100.0
 
 
 APP = Application(

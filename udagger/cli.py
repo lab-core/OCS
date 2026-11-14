@@ -44,7 +44,8 @@ class Application:
         seeds: ``seeds(split, n, run_seed)`` returns the episode seeds of a
             split (``train``, ``valid`` or ``test``).
         hindsight: ``hindsight(args, seed)`` returns the offline optimum of an
-            episode.
+            episode, or ``(value, gap)`` with the final relative MIP gap when
+            the optimum is solved with a time limit.
         hindsight_time_limit: Default ``--time-limit`` of ``hindsight``, or
             None if the optimum has no time limit.
     """
@@ -56,13 +57,15 @@ class Application:
     make_problem: Callable[[argparse.Namespace], Problem]
     make_expert: Callable[[argparse.Namespace], Expert]
     seeds: Callable[[str, int, int], list[int]]
-    hindsight: Callable[[argparse.Namespace, int], float]
+    hindsight: Callable[[argparse.Namespace, int], float | tuple[float, float]]
     hindsight_time_limit: float | None = None
 
 
-def _hindsight_task(task: tuple) -> tuple[int, float]:
+def _hindsight_task(task: tuple) -> tuple[int, float, float]:
     hindsight, args, seed = task
-    return seed, float(hindsight(args, seed))
+    out = hindsight(args, seed)
+    value, gap = out if isinstance(out, tuple) else (out, 0.0)
+    return seed, float(value), float("nan") if gap is None else float(gap)
 
 
 def cmd_hindsight(app: Application, args: argparse.Namespace) -> None:
@@ -73,9 +76,16 @@ def cmd_hindsight(app: Application, args: argparse.Namespace) -> None:
         tasks = [(app.hindsight, args, s) for s in app.seeds(split, n, 0)]
         with mp.get_context("spawn").Pool(args.workers) as pool:
             rows = pool.map(_hindsight_task, tasks)
-        text = "seed,hindsight\n" + "".join(f"{s},{v}\n" for s, v in rows)
+        text = "seed,hindsight,gap\n" + "".join(f"{s},{v},{g}\n" for s, v, g in rows)
         (out / f"hindsight_{split}.csv").write_text(text)
-        print(split, "mean hindsight", sum(v for _, v in rows) / max(1, len(rows)))
+        mean = sum(v for _, v, _ in rows) / max(1, len(rows))
+        print(split, "mean hindsight", mean)
+        not_optimal = [s for s, _, g in rows if not g <= 1e-6]
+        if not_optimal:
+            print(
+                f"warning: {len(not_optimal)} {split} optima not proven "
+                f"(time limit), e.g. seed {not_optimal[0]}; see the gap column"
+            )
 
 
 def cmd_expert(app: Application, args: argparse.Namespace) -> None:
@@ -99,7 +109,9 @@ def cmd_learn(app: Application, args: argparse.Namespace) -> None:
     """Learn a policy from an expert with one-shot cloning or DAgger."""
     expert = app.make_expert(args)
     runner = Runner(app.make_problem(args), args.workers)
-    tag = f"{expert.name}_gap{args.gap:g}_{args.mode}_s{args.seed}"
+    tag = f"{expert.name}_gap{args.gap:g}_{args.mode}_s{args.seed}{args.tag}"
+    options = {k: v for k, v in vars(args).items() if k not in ("func", "workers")}
+    _check_overwrite(Path(args.out) / tag / "test.json", options)
     run_learning(
         runner,
         expert,
@@ -114,9 +126,23 @@ def cmd_learn(app: Application, args: argparse.Namespace) -> None:
             "kind": getattr(expert, "kind", expert.name),
             "scenarios": getattr(expert, "n_scenarios", 1),
             "gap": args.gap,
+            "options": options,
         },
     )
     runner.close()
+
+
+def _check_overwrite(summary: Path, options: dict) -> None:
+    """Refuse to overwrite a run made with different options."""
+    if not summary.exists():
+        return
+    previous = json.loads(summary.read_text()).get("options")
+    if previous is not None and previous != options:
+        changed = sorted(k for k in options if previous.get(k) != options[k])
+        raise SystemExit(
+            f"{summary.parent} holds a run with other options ({changed}); "
+            "use --tag to name this variant"
+        )
 
 
 def add_expert_arguments(parser: argparse.ArgumentParser, kinds: Sequence[str]) -> None:
@@ -161,6 +187,9 @@ def build_parser(app: Application, description: str) -> argparse.ArgumentParser:
     p_learn = sub.add_parser("learn")
     add_expert_arguments(p_learn, app.expert_kinds)
     add_learn_arguments(p_learn)
+    p_learn.add_argument(
+        "--tag", default="", help="suffix of the run folder (variants of options)"
+    )
     p_learn.set_defaults(func=cmd_learn)
     return parser
 

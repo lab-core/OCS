@@ -163,8 +163,6 @@ class Runner:
         if workers > 1:
             ctx = mp.get_context("spawn")
             self.pool = ctx.Pool(workers, initializer=_init_worker, initargs=(problem,))
-        else:
-            _init_worker(problem)
 
     def run(
         self,
@@ -175,9 +173,12 @@ class Runner:
         collect: bool = False,
     ) -> list[EpisodeResult]:
         """Run one episode per seed and return results in seed order."""
-        tasks = [(s, expert, policy, beta, collect) for s in seeds]
         if self.pool is None:
-            return [_task(t) for t in tasks]
+            return [
+                run_episode(self.problem, s, expert, policy, beta, collect)
+                for s in seeds
+            ]
+        tasks = [(s, expert, policy, beta, collect) for s in seeds]
         return self.pool.map(_task, tasks, chunksize=1)
 
     def close(self) -> None:

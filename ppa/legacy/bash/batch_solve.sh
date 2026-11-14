@@ -4,7 +4,7 @@
 #SBATCH --time=00:20:00
 #SBATCH --partition=optimum
 #SBATCH --array=1-700
-#SBATCH --output=../Doutput/arrayjob_%A_%a.out
+#SBATCH --output=../../Doutput/arrayjob_%A_%a.out
 
 
 module load gurobi/11.0.0
@@ -19,7 +19,7 @@ for n in  {6701..7000}
 do
         	if [ $SLURM_ARRAY_TASK_ID -eq $i ]
 		then
-	    		python ../OCS.py --seed $n --N1 25 --s1 2.5 --N2 75 --s2 6 --P $P --I 8 --L 20 --var 0 --kmin 1 --kmax $P --pw 1 --time_limit 60 --cnp 10 --co 0 > ../Doutput/output_$n$s.txt
+	    		(cd .. && python OCS.py --seed $n --N1 25 --s1 2.5 --N2 75 --s2 6 --P $P --I 8 --L 20 --var 0 --kmin 1 --kmax $P --pw 1 --time_limit 60 --cnp 10 --co 0 > ../Doutput/output_$n$s.txt)
 		fi
 	    	(( i = $i +1 ))
 done

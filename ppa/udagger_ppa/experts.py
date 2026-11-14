@@ -101,13 +101,20 @@ class Expert(ExpertSpec):
                 new = 0 if self.kind == "full" else 1
                 model.build_model(model.regenerated_patients, state, new=new)
             _, _, model_gap, sol_time = model.solve(tee=False)
-            if self.kind == "saa":
-                model.extract_solution()
-            else:
-                model.extract_solution(model.regenerated_patients)
-            votes.append(int(model.get_current_action(0)))
             solve_time += float(sol_time or 0.0)
-            gap = max(gap, float(model_gap or 0.0) / 100.0)
+            try:
+                if self.kind == "saa":
+                    model.extract_solution()
+                else:
+                    model.extract_solution(model.regenerated_patients)
+                votes.append(int(model.get_current_action(0)))
+            except (TypeError, ValueError, KeyError):
+                # No incumbent within the time limit: vote to reject the
+                # request (always feasible) and report an unknown (100%) gap.
+                votes.append(n_actions - 1)
+                model_gap = None
+            # The solver reports no gap when it has no finite bounds.
+            gap = max(gap, 1.0 if model_gap is None else float(model_gap) / 100.0)
         action, dist = aggregate_votes(votes, n_actions, rng, sample=self.sample_vote)
         return Label(action, dist, solve_time, gap)
 

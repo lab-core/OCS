@@ -25,6 +25,7 @@ class AdwordsEpisode:
         self.seed = seed
         self.queries = sample_episode(market, np.random.default_rng(seed))
         self.sim = Simulator(market, self.queries)
+        self._mask: tuple[int, np.ndarray] | None = None
 
     @property
     def done(self) -> bool:
@@ -37,11 +38,14 @@ class AdwordsEpisode:
 
     def features(self, state: State) -> np.ndarray:
         """Return the feature vector of a state."""
-        return features(self.market, state)
+        return features(self.market, state, self.mask(state))
 
     def mask(self, state: State) -> np.ndarray:
         """Return the feasibility mask (action 0 skips the query)."""
-        return feasible_mask(self.market, state)
+        # Cached for the current decision (features and mask use it).
+        if self._mask is None or self._mask[0] != state.k:
+            self._mask = (state.k, feasible_mask(self.market, state))
+        return self._mask[1]
 
     def step(self, action: int) -> None:
         """Serve or skip the current query."""

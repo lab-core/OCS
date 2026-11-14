@@ -193,7 +193,7 @@ def learn(
         n_it = n_episodes // per_it
         policy = None
         for it in range(n_it):
-            beta = 1.0 if it == 0 else cfg.beta_decay**it
+            beta = cfg.beta_decay**it
             seeds = train_seeds[it * per_it : (it + 1) * per_it]
             results = runner.run(
                 seeds, expert=expert, policy=policy, beta=beta, collect=True

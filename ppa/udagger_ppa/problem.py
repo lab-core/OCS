@@ -29,6 +29,9 @@ class PPAEpisode:
         self.sim = sim
         self.seed = seed
         self.uid = next(_EPISODE_IDS)
+        # The simulator is shared by the episodes of a process: only the most
+        # recent episode may use it.
+        sim.udagger_episode = self.uid
         sim.set_seed(seed)
         sim.generate_instance()
         self.state, self._done = sim.reset_simulator()
@@ -43,14 +46,20 @@ class PPAEpisode:
         """Whether the booking horizon is over."""
         return self._done
 
+    def _check(self) -> None:
+        if getattr(self.sim, "udagger_episode", None) != self.uid:
+            raise RuntimeError("the simulator now runs a newer episode")
+
     def observe(self) -> dict:
         """Return the simulator state."""
+        self._check()
         return self.state
 
     def features(self, state: dict) -> np.ndarray:
         """Features of a state (computed once per state)."""
-        if self._x is None or self._x[0] != id(state):
-            self._x = (id(state), features(state, self.sim))
+        # Cached for the current decision (patient index ``t``).
+        if self._x is None or self._x[0] != state["t"]:
+            self._x = (state["t"], features(state, self.sim))
         return self._x[1]
 
     def mask(self, state: dict) -> np.ndarray:
@@ -59,6 +68,7 @@ class PPAEpisode:
 
     def step(self, action: int) -> None:
         """Assign or reject the calling patient."""
+        self._check()
         self.states.append(self.state)
         out = self.sim.step(int(action))
         # The simulator returns (state, reward, done) when called on a
@@ -79,6 +89,7 @@ class PPAEpisode:
 
     def stats(self) -> dict[str, float]:
         """Total cost (the objective), rejections and arrivals."""
+        self._check()
         st = self.sim.collect_stats(
             [*self.states, self.state], self.actions, self.rewards, self.feasibles
         )

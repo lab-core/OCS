@@ -133,3 +133,12 @@ def test_rollout_hindsight_and_seeds() -> None:
     assert split_seeds("test", 2) == [5001, 5002]
     with pytest.raises(ValueError):
         split_seeds("valid", 1001)
+
+
+def test_old_episode_cannot_use_the_shared_simulator() -> None:
+    """An episode fails loudly once a newer episode reuses the simulator."""
+    problem = PPAProblem(Instance())
+    old = problem.episode(5001)
+    problem.episode(5002)
+    with pytest.raises(RuntimeError):
+        old.step(0)

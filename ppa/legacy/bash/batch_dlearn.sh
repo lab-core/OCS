@@ -5,7 +5,7 @@
 #SBATCH --time=48:00:00
 #SBATCH --partition=optimumlong
 #SBATCH --array=1-100
-#SBATCH --output=../Doutput/arrayjob_%A_%a.out
+#SBATCH --output=../../Doutput/arrayjob_%A_%a.out
 #SBATCH --begin=now+0hour
 
 module load gurobi/11.0.0
@@ -41,7 +41,7 @@ do
 
         	if [ $SLURM_ARRAY_TASK_ID -eq $i ]
 		then
-	    		python ../Direct_Learn.py  --N $N --s $s --P $P --I 8 --L 20 --adapter $adapter  --kmin $kmin --kmax $P --pw $pw  --cnp 10 --co 0  --runs $runs --new $new  --scenarios $scen --stoch $stoch --um $um --learn_iter $li  --resume $cont --use_weight $w --lm $lm --time_limit $tl --vanilla $vanilla --gated $gated > ../Doutput/Loutput$P$s$tl$kmin$pw$scen$new$stoch$runs.txt	
+	    		(cd .. && python Direct_Learn.py  --N $N --s $s --P $P --I 8 --L 20 --adapter $adapter  --kmin $kmin --kmax $P --pw $pw  --cnp 10 --co 0  --runs $runs --new $new  --scenarios $scen --stoch $stoch --um $um --learn_iter $li  --resume $cont --use_weight $w --lm $lm --time_limit $tl --vanilla $vanilla --gated $gated > ../Doutput/Loutput$P$s$tl$kmin$pw$scen$new$stoch$runs.txt)
 
 		fi
 	    	(( i = $i +1 ))

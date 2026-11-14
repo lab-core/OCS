@@ -8,12 +8,15 @@ from udagger_adwords.simulator import State, feasible_mask
 from udagger_adwords.instance import Market
 
 
-def features(market: Market, state: State) -> np.ndarray:
+def features(
+    market: Market, state: State, mask: np.ndarray | None = None
+) -> np.ndarray:
     """Encode a state as a feature vector.
 
     Args:
         market: The market.
         state: Current state.
+        mask: Feasibility mask of the state, if already computed.
 
     Returns:
         Float32 feature vector: time, query type (one-hot), queries observed
@@ -23,7 +26,9 @@ def features(market: Market, state: State) -> np.ndarray:
     query = np.zeros(market.n_types, dtype=np.float32)
     query[state.query] = 1.0
     bid = market.bids[:, state.query]
-    mask = feasible_mask(market, state)[1:]
+    if mask is None:
+        mask = feasible_mask(market, state)
+    mask = mask[1:]
     return np.concatenate(
         [
             [state.time],

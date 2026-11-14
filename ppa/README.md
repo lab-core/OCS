@@ -118,6 +118,11 @@ python Learn_Sim.py --sims 1000 --model 399 --new 1 --scenarios 5 --stoch 1 \
     --um 1 --learn_iter 400 --runs 10 --time_limit 30 --mipgap 0.02
 ```
 
+The job scripts of `legacy/bash/` run the scripts from `legacy/`, so that
+their relative paths (`../data`, `../Loutput`, ...) point to `ppa/` as
+before. `bash/batch_solve.sh` ran the command-line demo of `OCS.py`, which
+was not kept.
+
 `tests/test_ppa.py` checks that the features and the expert decisions
 of `udagger_ppa` are identical to those of the original `IO_learning` on the
 same states and seeds.
