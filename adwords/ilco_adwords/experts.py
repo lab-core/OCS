@@ -141,7 +141,7 @@ class Expert:
             votes.append(res.action)
             solve_time += res.runtime
             gap = max(gap, _rel_gap(res.objective, res.bound))
-        # Physician study: the executed action is drawn from the votes (this
-        # also draws for single-solve experts, keeping the random stream).
+        # Physician study: with sample_vote the executed action is drawn from
+        # the votes, which uses one random draw even for single-solve experts.
         action, dist = aggregate_votes(votes, size, rng, sample=self.sample_vote)
         return Label(action, dist, solve_time, gap)

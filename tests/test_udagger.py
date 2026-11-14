@@ -166,3 +166,19 @@ def test_minimisation_selects_lowest() -> None:
         log=lambda line: None,
     )
     assert res.best["val_objective"] == min(r["val_objective"] for r in res.curve)
+
+
+def test_learn_rejects_empty_inputs() -> None:
+    """Missing episodes or labels raise a clear error."""
+    runner = Runner(ToyProblem())
+    with pytest.raises(ValueError, match="training and validation"):
+        learn(runner, OracleExpert(), LearnConfig(), [], [0])
+
+    class Silent(ToyProblem):
+        def episode(self, seed: int) -> ToyEpisode:
+            ep = ToyEpisode(seed)
+            ep.t = len(ep.x)  # already over: nothing to label
+            return ep
+
+    with pytest.raises(ValueError, match="no state was labelled"):
+        learn(Runner(Silent()), OracleExpert(), LearnConfig(mode="oneshot"), [1], [2])

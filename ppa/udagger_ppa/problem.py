@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import atexit
 import itertools
 import os
+import shutil
 import sys
 import tempfile
 from dataclasses import asdict
@@ -16,8 +18,9 @@ from OCS import AppointmentScheduler
 from utility import Config, build_config, parse_args
 
 # Expert scenario seeds of an episode: offset + 1000 * episode seed + j, with
-# j < 1000 the scenario index (disjoint from the episode seeds themselves).
-EXPERT_SEED_OFFSET = 10_000_000
+# j < 1000 the scenario index. The offset keeps them above every episode seed
+# (training seeds are 10**6 * (run + 1) + i, so below 10**12 for any run).
+EXPERT_SEED_OFFSET = 10**12
 _EPISODE_IDS = itertools.count()
 
 
@@ -53,7 +56,11 @@ class _Context:
     def __init__(self, config: Config) -> None:
         """Build the simulator exactly as in ``Learn_Main.py``."""
         p = config.ocs_param
+        if config.num_class != p["P"] + 1:
+            raise ValueError("only the full action space (--task full) is supported")
+        # The original classes write solver and instance files to a folder.
         self.tmp = tempfile.mkdtemp(prefix="ppa_")
+        atexit.register(shutil.rmtree, self.tmp, ignore_errors=True)
         self.sim = AppointmentScheduler(
             n_patients1=p["N1"],
             sigma1=p["sigma1"],
@@ -96,6 +103,7 @@ class PPAEpisode:
         ctx.sim.set_seed(seed)
         ctx.sim.generate_instance()
         self.state, self._done = ctx.sim.reset_simulator()
+        self._cache: tuple[int, np.ndarray] | None = None
         self.states: list[dict] = []
         self.actions: list[int] = []
         self.rewards: list[float] = []
@@ -112,7 +120,10 @@ class PPAEpisode:
 
     def features(self, state: dict) -> np.ndarray:
         """Features of the original study (``IO_learning.get_feature_vector``)."""
-        return np.asarray(self.ctx.learner.get_feature_vector(state), np.float32)
+        if self._cache is None or self._cache[0] != id(state):
+            x = self.ctx.learner.get_feature_vector(state)
+            self._cache = (id(state), np.asarray(x, np.float32))
+        return self._cache[1]
 
     def mask(self, state: dict) -> np.ndarray:
         """Feasible actions; the last feature block flags blocked actions."""
@@ -123,7 +134,14 @@ class PPAEpisode:
     def step(self, action: int) -> None:
         """Assign or reject the current patient."""
         self.states.append(self.state)
-        self.state, reward, feasible, self._done = self.ctx.sim.step(int(action))
+        out = self.ctx.sim.step(int(action))
+        # The simulator returns (state, reward, done) on its early-termination
+        # branches and (state, reward, feasible, done) otherwise.
+        if len(out) == 3:
+            self.state, reward, self._done = out
+            feasible = True
+        else:
+            self.state, reward, feasible, self._done = out
         self.actions.append(int(action))
         self.rewards.append(reward)
         self.feasibles.append(feasible)
@@ -218,13 +236,28 @@ class PPAExpert:
 
 
 class PPAGreedy:
-    """Myopic rule: preferred physician if possible, else a random eligible one."""
+    """Myopic rule: preferred physician if possible, else a random eligible one.
+
+    The executed action is drawn by the simulator, as in the original study;
+    the training target is the rule itself (uniform over the eligible
+    physicians when the preferred one is unavailable).
+    """
 
     name = "greedy"
 
     def __call__(
         self, episode: PPAEpisode, state: dict, rng: np.random.Generator
     ) -> Label:
-        """Return the greedy action (drawn by the simulator, as originally)."""
-        action = int(episode.ctx.sim.select_physician(state))
-        return Label(action, one_hot(action, episode.ctx.sim.P + 1))
+        """Return the greedy action and the distribution of the rule."""
+        sim = episode.ctx.sim
+        action = int(sim.select_physician(state))
+        cur = state["current_patient"]
+        avail = list(cur.get("available_phys") or [1] * sim.P)
+        elig = list(cur.get("eligible_phys") or [1] * sim.P)
+        pref = int(cur.get("preferred_phys", 0))
+        ok = [p for p in range(sim.P) if avail[p] == 1 and elig[p] == 1]
+        if pref in ok or not ok:
+            return Label(action, one_hot(action, sim.P + 1))
+        dist = np.zeros(sim.P + 1)
+        dist[ok] = 1.0 / len(ok)
+        return Label(action, dist)

@@ -23,7 +23,14 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from udagger import EpisodeResult, LearnConfig, NumpyPolicy, Runner, learn
+from udagger import (
+    EpisodeResult,
+    LearnConfig,
+    NumpyPolicy,
+    Runner,
+    learn,
+    mean_objective,
+)
 
 from ilco_adwords.experts import EXPERT_KINDS, Expert
 from ilco_adwords.market import Market, make_market, sample_episode, split_seeds
@@ -120,10 +127,6 @@ def _evaluate(runner: Runner, policy: NumpyPolicy, split: str, n: int) -> list:
     return runner.run(split_seeds(split, n), policy=policy)
 
 
-def _mean(results: list[EpisodeResult]) -> float:
-    return float(np.mean([r.objective for r in results]))
-
-
 def cmd_learn(args: argparse.Namespace) -> None:
     """Learn a policy from an expert with one-shot cloning or DAgger."""
     market = _market(args)
@@ -175,9 +178,9 @@ def cmd_learn(args: argparse.Namespace) -> None:
         "episodes": args.episodes,
         "best": res.best,
         "policy_action": args.policy_action,
-        "test_revenue": _mean(test),
-        "test_revenue_mode": _mean(by_rule["mode"]),
-        "test_revenue_sample": _mean(by_rule["sample"]),
+        "test_revenue": mean_objective(test),
+        "test_revenue_mode": mean_objective(by_rule["mode"]),
+        "test_revenue_sample": mean_objective(by_rule["sample"]),
         "label_seconds": res.label_seconds,
         "wall_seconds": time.perf_counter() - start,
         "curve": res.curve,

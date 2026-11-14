@@ -99,6 +99,8 @@ def _train(
     seed: int,
     init: NumpyPolicy | None = None,
 ) -> tuple[NumpyPolicy, dict]:
+    if not data or data["x"].shape[0] == 0:
+        raise ValueError("no state was labelled by the expert")
     policy, stats = train_policy(
         data["x"],
         data["target"],
@@ -167,10 +169,14 @@ def learn(
             best = {"score": sign * val, "policy": policy, "row": row}
 
     n_episodes = len(train_seeds)
+    if n_episodes == 0 or not valid_seeds:
+        raise ValueError("learn needs training and validation episodes")
     if cfg.mode == "oneshot":
         results = runner.run(train_seeds, expert=expert, collect=True)
         label_seconds = sum(r.solve_time for r in results)
         data_all = stack(results)
+        if not data_all:
+            raise ValueError("no state was labelled by the expert")
         sizes = sorted({int(s) for s in cfg.sizes if s <= n_episodes} | {n_episodes})
         for size in sizes:
             keep = np.isin(data_all["episode"], train_seeds[:size])
@@ -201,6 +207,11 @@ def learn(
                 policy, stats = _train(cfg, data, train_seed, init)
                 checkpoint(policy, it + 1, (it + 1) * per_it, stats)
 
+    if "policy" not in best:
+        raise ValueError(
+            "no policy was selected: no state was labelled or every validation "
+            "objective is NaN"
+        )
     return LearnResult(
         policy=best["policy"],
         best=best["row"],

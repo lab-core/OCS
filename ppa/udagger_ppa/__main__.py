@@ -19,9 +19,8 @@ import json
 import time
 from pathlib import Path
 
-import numpy as np
 import torch
-from udagger import EpisodeResult, LearnConfig, Runner, learn
+from udagger import EpisodeResult, LearnConfig, Runner, learn, mean_objective
 
 from udagger_ppa.problem import (
     PPAExpert,
@@ -43,10 +42,6 @@ def _write(path: Path, results: list[EpisodeResult]) -> None:
     path.write_text("\n".join(lines) + "\n")
 
 
-def _mean(results: list[EpisodeResult]) -> float:
-    return float(np.mean([r.objective for r in results]))
-
-
 def main() -> None:
     """Parse the command line, learn and evaluate a policy."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -66,6 +61,8 @@ def main() -> None:
     parser.add_argument("ppa", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     ppa_args = args.ppa[1:] if args.ppa[:1] == ["--"] else args.ppa
+    if max(args.n_test, args.n_valid) > VALID_SEED - TEST_SEED:
+        parser.error("test (5001+) and validation (6001+) episodes would overlap")
     config = config_from_args(ppa_args)
 
     problem = PPAProblem(config)
@@ -104,8 +101,8 @@ def main() -> None:
         "seed": args.seed,
         "episodes": args.episodes,
         "best": res.best,
-        "test_cost_sample": _mean(by_rule["sample"]),
-        "test_cost_mode": _mean(by_rule["mode"]),
+        "test_cost_sample": mean_objective(by_rule["sample"]),
+        "test_cost_mode": mean_objective(by_rule["mode"]),
         "label_seconds": res.label_seconds,
         "wall_seconds": time.perf_counter() - start,
         "curve": res.curve,
