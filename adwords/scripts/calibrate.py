@@ -13,6 +13,10 @@ from ilco_adwords.market import make_market, sample_episode
 from ilco_adwords.rollout import run_episode
 from ilco_adwords.solver import offline_optimum
 
+# Episodes used only for calibration (test, valid and train start at 1e6, 2e6
+# and 3e6 + 1e6 * run, see market.episode_seed).
+CALIBRATION_OFFSET = 900_000
+
 
 def task(args: tuple) -> tuple:
     """Evaluate all experts of a configuration on one episode."""
@@ -37,7 +41,8 @@ def main() -> None:
         int(sys.argv[2]) if len(sys.argv) > 2 else 8
     ) as pool:
         for cfg in grid:
-            res = np.array(pool.map(task, [(cfg, 1_000_000 + i) for i in range(n_ep)]))
+            seeds = [CALIBRATION_OFFSET + i for i in range(n_ep)]
+            res = np.array(pool.map(task, [(cfg, s) for s in seeds]))
             ratio = res[:, 1:].sum(0) / res[:, 0].sum()
             print(
                 cfg,

@@ -433,20 +433,18 @@ def fig_teacher(table: pd.DataFrame, out: Path) -> None:
         color=[COLORS[n] for n in names],
         label="DAgger",
     )
-    ax.axhline(ppa_online["full"], color=COLORS["full"], ls=":", lw=1)
-    ax.text(
-        len(names) - 0.5, ppa_online["full"] + 15, "hindsight", ha="right", fontsize=7
-    )
-    ax.axhline(ppa_online["saa30"], color=COLORS["saa30"], ls="--", lw=1)
-    ax.text(
-        len(names) - 0.5,
-        ppa_online["saa30"] + 15,
-        "2S-30 online",
-        ha="right",
-        fontsize=7,
-    )
+    for key, style, text in (
+        ("full", ":", "hindsight"),
+        ("saa30", "--", "2S-30 online"),
+    ):
+        if key in ppa_online:
+            ax.axhline(ppa_online[key], color=COLORS[key], ls=style, lw=1)
+            ax.text(
+                len(names) - 0.5, ppa_online[key] + 15, text, ha="right", fontsize=7
+            )
     ax.set_xticks(x, [SHORT[n] for n in names], fontsize=8)
-    ax.set_ylim(0.9 * ppa_online["full"], 1.05 * max(ppa_oneshot.values()))
+    low = min([*ppa_online.values(), *ppa_dagger.values()])
+    ax.set_ylim(0.9 * low, 1.05 * max(ppa_oneshot.values()))
     ax.set_ylabel("average cost (lower is better)", fontsize=8)
     ax.set_title("(a) PPA: learned policies", fontsize=9)
     ax.legend(fontsize=7, loc="upper right", frameon=False)

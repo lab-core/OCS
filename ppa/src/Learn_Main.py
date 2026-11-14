@@ -225,7 +225,14 @@ def main():
         for i in range(config.runs):
             #print(f"p_generator state before generate_instance n={n}: {sim[i].p_generator.bit_generator.state}")
             sim[i].generate_instance()
-            learner[i].set_scenarios(1000 + n * 100 + i, asdict(config))
+            if config.seed_in_name:
+                # Scenario seeds tied to the training seed, spaced by 100 per
+                # run (a learner adds the scenario index j < 100) and far from
+                # the validation (6001+) and test (5001+) episode seeds.
+                scen_seed = config.seed * 10**7 + (n * config.runs + i) * 100
+            else:
+                scen_seed = 1000 + n * 100 + i
+            learner[i].set_scenarios(scen_seed, asdict(config))
     
         with get_context("spawn").Pool(min(config.runs, config.workers)) as pool:
             # Add progress bar for pool mapping

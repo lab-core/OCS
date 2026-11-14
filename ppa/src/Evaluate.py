@@ -34,7 +34,7 @@ import torch
 from Learn_Module import IO_learning
 from NN import SupervisedNN
 from OCS import AppointmentScheduler
-from utility import build_config, parse_args
+from utility import Config, build_config, parse_args
 
 SPLIT_SEED = {"test": 5001, "valid": 6001}
 # Offset of the scenario seeds of experts evaluated online (training uses
@@ -43,7 +43,7 @@ EXPERT_SEED_OFFSET = 10_000_000
 _W: dict = {}
 
 
-def make_sim(config) -> AppointmentScheduler:
+def make_sim(config: Config) -> AppointmentScheduler:
     """Build a simulator exactly as in ``Learn_Main.py``.
 
     Args:
@@ -93,7 +93,7 @@ class _Chooser:
         return int(self.rng.choice(range(self.num_class), p=prob))
 
 
-def _init(config, args: argparse.Namespace) -> None:
+def _init(config: Config, args: argparse.Namespace) -> None:
     torch.set_num_threads(1)
     _W["config"] = config
     _W["args"] = args
@@ -135,7 +135,8 @@ def _episode(task: tuple[int, int]) -> dict:
         policy = _policy(model)
         policy.chooser = rng
     elif args.target == "expert":
-        learner.set_scenarios(EXPERT_SEED_OFFSET + seed, asdict(config))
+        # set_scenarios adds the scenario index j < 1000 to this seed.
+        learner.set_scenarios(EXPERT_SEED_OFFSET + 1000 * seed, asdict(config))
         chooser = _Chooser(rng, config.num_class)
 
     states, actions, rewards, feasibles = [], [], [], []
@@ -174,7 +175,7 @@ def _episode(task: tuple[int, int]) -> dict:
     return row
 
 
-def parse() -> tuple[argparse.Namespace, object]:
+def parse() -> tuple[argparse.Namespace, Config]:
     """Split the command line into evaluation options and PPA options."""
     extra = argparse.ArgumentParser(add_help=False)
     extra.add_argument(

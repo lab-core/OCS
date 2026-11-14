@@ -53,8 +53,9 @@ SHORT = {
     "saa30": "2S-30",
 }
 RUN_RE = re.compile(
-    r"NN_iter(?P<iter>\d+)_runs(?P<runs>\d+)_um\d+_new(?P<new>\d)_stoch(?P<stoch>\d)"
-    r"_sc(?P<sc>\d+)_van\d_gat\d_tl\d+_mg(?P<mg>[\d.e-]+)_nc\d+_seed(?P<seed>\d+)"
+    r"NN_iter(?P<iter>\d+)_runs(?P<runs>\d+)_um(?P<um>\d+)"
+    r"_new(?P<new>\d)_stoch(?P<stoch>\d)_sc(?P<sc>\d+)_van\d_gat\d_tl\d+"
+    r"_mg(?P<mg>[\d.e-]+)_nc\d+_seed(?P<seed>\d+)"
 )
 
 
@@ -92,7 +93,8 @@ def load_runs(data: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
         if m is None:
             continue
         name = expert_name(int(m["new"]), int(m["stoch"]), int(m["sc"]))
-        mode = "oneshot" if int(m["iter"]) == 1 else "dagger"
+        # One-shot runs train once at the end (um = number of iterations).
+        mode = "dagger" if int(m["um"]) == 1 else "oneshot"
         df = pd.read_csv(test)
         mode_path = test.with_name("test_max.csv")
         cost_max = (

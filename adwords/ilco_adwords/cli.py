@@ -205,6 +205,8 @@ def cmd_learn(args: argparse.Namespace) -> None:
         data = data_all
     else:
         per_it = args.per_iteration
+        if args.episodes % per_it:
+            raise ValueError("--episodes must be a multiple of --per-iteration")
         n_it = args.episodes // per_it
         policy = None
         for it in range(n_it):
@@ -218,7 +220,8 @@ def cmd_learn(args: argparse.Namespace) -> None:
             last = it == n_it - 1
             if (it + 1) % args.retrain_every == 0 or it == 0 or last:
                 init = policy if args.warm_start else None
-                policy, stats = _train(args, data, args.seed + it, init)
+                train_seed = args.seed * 100_000 + it
+                policy, stats = _train(args, data, train_seed, init)
                 checkpoint(policy, it + 1, (it + 1) * per_it, stats)
 
     test = _evaluate(runner, best["policy"], "test", args.n_test)
@@ -316,7 +319,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         nargs="*",
         default=[],
-        help="one-shot: also train on these first episode counts",
+        help="one-shot: also train on these sizes and keep the best on validation",
     )
     p_learn.add_argument("--per-iteration", type=int, default=10)
     p_learn.add_argument("--retrain-every", type=int, default=1)

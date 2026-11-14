@@ -15,8 +15,7 @@ CPUS=${SLURM_CPUS_PER_TASK:-2}
 cd ../src
 # Instance and learning options of the IJOO study (bash/batch_learn.sh).
 COMMON="--N1 25 --s1 5 --N2 75 --s2 12 --P 4 --I 8 --L 20 --adapter flat \
---var 1 --kmin 1 --kmax 4 --pw 1 --cnp 10 --co 0 --um 1 --use_weight 0 \
---lm 0.8 --vanilla 1 --gated 0 --evolve_expert 0 --time_limit ${tl} --mipgap ${mg}"
+--var 1 --kmin 1 --kmax 4 --pw 1 --cnp 10 --co 0 --use_weight 0 --vanilla 1 --gated 0 --evolve_expert 0 --time_limit ${tl} --mipgap ${mg}"
 OUT=../data/evaluation
 
 if [ "$kind" != learn ]; then
@@ -27,12 +26,17 @@ if [ "$kind" != learn ]; then
 fi
 
 seed=$((1000000 * (rep + 1)))
-if [ "$mode" = oneshot ]; then li=1 runs=4000 workers=$((CPUS / 2)); else
-  li=400 runs=10 workers=10; fi
-python Learn_Main.py ${COMMON} ${expert} --learn_iter ${li} --runs ${runs} \
-  --resume 0 --seed ${seed} --seed_in_name 1 --workers ${workers}
+# 400 iterations of 10 episodes in both modes. One-shot keeps the expert in
+# control (lambda = 1, so beta stays 1) and trains once at the end (um = 400),
+# instead of the original single iteration of 4,000 parallel episodes, which
+# builds all 4,000 simulators and their scenario models at once.
+li=400 runs=10
+if [ "$mode" = oneshot ]; then lm=1 um=400; else lm=0.8 um=1; fi
+python Learn_Main.py ${COMMON} ${expert} --lm ${lm} --um ${um} \
+  --learn_iter ${li} --runs ${runs} --resume 0 --seed ${seed} --seed_in_name 1 \
+  --workers ${runs}
 
-dir=$(ls -d ../data/Data_Dagger_0.8_flat_0/Instances_*/NN_iter${li}_runs${runs}_*_mg${mg}_nc5_seed${seed}/ | \
+dir=$(ls -d ../data/Data_Dagger_${lm}*_flat_0/Instances_*/NN_iter${li}_runs${runs}_um${um}_*_mg${mg}_nc5_seed${seed}/ | \
   grep -F -- "$(python - ${expert} <<'PY'
 import sys
 from utility import build_config, parse_args
@@ -41,7 +45,8 @@ print(f"_new{c.new}_stoch{c.stoch}_sc{c.scenarios}_")
 PY
 )")
 echo "folder: ${dir}"
-best=0
+# One-shot trains a single model, saved at the last iteration.
+best=$((li - 1))
 if [ "$mode" = dagger ]; then
   python Evaluate.py --target policy --split valid --workers "${CPUS}" \
     --policy_dir "${dir}" --models $(seq 0 $((li - 1))) \

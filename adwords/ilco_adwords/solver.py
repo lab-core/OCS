@@ -96,11 +96,13 @@ class _Structure:
         )
 
 
-_STRUCTURES: dict[int, _Structure] = {}
+_STRUCTURES: dict[bytes, _Structure] = {}
 
 
 def _structure(market: Market) -> _Structure:
-    key = id(market)
+    # Markets reach workers by pickling, so object identity cannot be the key:
+    # the model structure only depends on the bids and the query classes.
+    key = market.bids.tobytes() + market.type_class.tobytes()
     if key not in _STRUCTURES:
         _STRUCTURES[key] = _Structure(market)
     return _STRUCTURES[key]
@@ -158,6 +160,16 @@ def solve_count_mip(
     model.optimize()
 
     action = -1
+    if model.SolCount == 0:
+        # No incumbent within the time limit: skip the query (always feasible).
+        result = SolveResult(
+            action=0 if z is not None else -1,
+            objective=0.0,
+            bound=float(model.ObjBound),
+            runtime=time.perf_counter() - start,
+        )
+        model.dispose()
+        return result
     if z is not None:
         zval = z.X
         action = int(np.argmax(zval)) + 1 if zval.max() > 0.5 else 0
