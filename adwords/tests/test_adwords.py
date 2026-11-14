@@ -125,3 +125,39 @@ def test_policy_learns_greedy(market: Market) -> None:
     assert stats.val_acc > 0.9
     sim = Simulator(market, sample_episode(market, np.random.default_rng(99)))
     assert features(market, sim.state()).shape[0] == x.shape[1]
+
+
+def test_sampling_policy_and_warm_start(market: Market) -> None:
+    """Sampled actions are feasible and paired; warm start keeps the weights."""
+    data = [run_episode(market, s, Expert("greedy"), collect=True) for s in range(5)]
+    x = np.concatenate([d.x for d in data])
+    y = np.concatenate([d.target for d in data])
+    m = np.concatenate([d.mask for d in data])
+    policy, _ = train_policy(x, y, m, max_epochs=2)
+    sampler = policy.with_sampling(True)
+    first = run_episode(market, 11, policy=sampler)
+    again = run_episode(market, 11, policy=sampler)
+    assert first.revenue == again.revenue
+    with pytest.raises(ValueError):
+        sampler.act(market, Simulator(market, _episode(market)).state())
+    # Zero epochs of training returns the initial weights unchanged.
+    warm, _ = train_policy(x, y, m, max_epochs=0, init=policy)
+    for (w0, b0), (w1, b1) in zip(policy.weights, warm.weights, strict=True):
+        np.testing.assert_allclose(w0, w1)
+        np.testing.assert_allclose(b0, b1)
+
+
+def test_aggregated_expert_samples_votes(market: Market) -> None:
+    """The aggregated expert can act by sampling or by majority."""
+    sim = Simulator(market, _episode(market))
+    state = sim.state()
+    for vote in (True, False):
+        label = Expert("agg", n_scenarios=3, sample_vote=vote)(
+            market, state, np.random.default_rng(0)
+        )
+        assert label.dist[label.action] > 0
+        assert np.isclose(label.dist.sum(), 1.0)
+
+
+def _episode(market: Market) -> Episode:
+    return sample_episode(market, np.random.default_rng(5))

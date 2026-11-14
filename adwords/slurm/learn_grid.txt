@@ -1,120 +1,115 @@
-learn --expert greedy --scenarios 1 --seed 0 --mode oneshot --episodes 2000 --sizes 100 250 500 1000 --save-data
-learn --expert greedy --scenarios 1 --seed 0 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10 --save-data
-learn --expert greedy --scenarios 1 --seed 1 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert greedy --scenarios 1 --seed 1 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert greedy --scenarios 1 --seed 2 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert greedy --scenarios 1 --seed 2 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert greedy --scenarios 1 --seed 3 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert greedy --scenarios 1 --seed 3 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert greedy --scenarios 1 --seed 4 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert greedy --scenarios 1 --seed 4 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert msvv --scenarios 1 --seed 0 --mode oneshot --episodes 2000 --sizes 100 250 500 1000 --save-data
-learn --expert msvv --scenarios 1 --seed 0 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10 --save-data
-learn --expert msvv --scenarios 1 --seed 1 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert msvv --scenarios 1 --seed 1 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert msvv --scenarios 1 --seed 2 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert msvv --scenarios 1 --seed 2 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert msvv --scenarios 1 --seed 3 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert msvv --scenarios 1 --seed 3 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert msvv --scenarios 1 --seed 4 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert msvv --scenarios 1 --seed 4 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert full --scenarios 1 --seed 0 --mode oneshot --episodes 2000 --sizes 100 250 500 1000 --save-data
-learn --expert full --scenarios 1 --seed 0 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10 --save-data
-learn --expert full --scenarios 1 --seed 1 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert full --scenarios 1 --seed 1 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert full --scenarios 1 --seed 2 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert full --scenarios 1 --seed 2 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert full --scenarios 1 --seed 3 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert full --scenarios 1 --seed 3 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert full --scenarios 1 --seed 4 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert full --scenarios 1 --seed 4 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert det --scenarios 1 --seed 0 --mode oneshot --episodes 2000 --sizes 100 250 500 1000 --save-data
-learn --expert det --scenarios 1 --seed 0 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10 --save-data
-learn --expert det --scenarios 1 --seed 1 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert det --scenarios 1 --seed 1 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert det --scenarios 1 --seed 2 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert det --scenarios 1 --seed 2 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert det --scenarios 1 --seed 3 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert det --scenarios 1 --seed 3 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert det --scenarios 1 --seed 4 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert det --scenarios 1 --seed 4 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert agg --scenarios 5 --seed 0 --mode oneshot --episodes 2000 --sizes 100 250 500 1000 --save-data
-learn --expert agg --scenarios 5 --seed 0 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10 --save-data
-learn --expert agg --scenarios 5 --seed 1 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert agg --scenarios 5 --seed 1 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert agg --scenarios 5 --seed 2 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert agg --scenarios 5 --seed 2 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert agg --scenarios 5 --seed 3 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert agg --scenarios 5 --seed 3 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert agg --scenarios 5 --seed 4 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert agg --scenarios 5 --seed 4 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert agg --scenarios 15 --seed 0 --mode oneshot --episodes 2000 --sizes 100 250 500 1000 --save-data
-learn --expert agg --scenarios 15 --seed 0 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10 --save-data
-learn --expert agg --scenarios 15 --seed 1 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert agg --scenarios 15 --seed 1 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert agg --scenarios 15 --seed 2 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert agg --scenarios 15 --seed 2 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert agg --scenarios 15 --seed 3 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert agg --scenarios 15 --seed 3 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert agg --scenarios 15 --seed 4 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert agg --scenarios 15 --seed 4 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert agg --scenarios 30 --seed 0 --mode oneshot --episodes 2000 --sizes 100 250 500 1000 --save-data
-learn --expert agg --scenarios 30 --seed 0 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10 --save-data
-learn --expert agg --scenarios 30 --seed 1 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert agg --scenarios 30 --seed 1 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert agg --scenarios 30 --seed 2 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert agg --scenarios 30 --seed 2 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert agg --scenarios 30 --seed 3 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert agg --scenarios 30 --seed 3 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert agg --scenarios 30 --seed 4 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert agg --scenarios 30 --seed 4 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 5 --seed 0 --mode oneshot --episodes 2000 --sizes 100 250 500 1000 --save-data
-learn --expert saa --scenarios 5 --seed 0 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10 --save-data
-learn --expert saa --scenarios 5 --seed 1 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert saa --scenarios 5 --seed 1 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 5 --seed 2 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert saa --scenarios 5 --seed 2 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 5 --seed 3 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert saa --scenarios 5 --seed 3 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 5 --seed 4 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert saa --scenarios 5 --seed 4 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 15 --seed 0 --mode oneshot --episodes 2000 --sizes 100 250 500 1000 --save-data
-learn --expert saa --scenarios 15 --seed 0 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10 --save-data
-learn --expert saa --scenarios 15 --seed 1 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert saa --scenarios 15 --seed 1 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 15 --seed 2 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert saa --scenarios 15 --seed 2 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 15 --seed 3 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert saa --scenarios 15 --seed 3 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 15 --seed 4 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert saa --scenarios 15 --seed 4 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 0 --mode oneshot --episodes 2000 --sizes 100 250 500 1000 --save-data
-learn --expert saa --scenarios 30 --seed 0 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10 --save-data
-learn --expert saa --scenarios 30 --seed 1 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert saa --scenarios 30 --seed 1 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 2 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert saa --scenarios 30 --seed 2 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 3 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert saa --scenarios 30 --seed 3 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 4 --mode oneshot --episodes 2000 --sizes 100 250 500 1000
-learn --expert saa --scenarios 30 --seed 4 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 0 --gap 0.01 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 1 --gap 0.01 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 2 --gap 0.01 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 3 --gap 0.01 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 4 --gap 0.01 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 0 --gap 0.02 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 1 --gap 0.02 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 2 --gap 0.02 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 3 --gap 0.02 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 4 --gap 0.02 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 0 --gap 0.05 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 1 --gap 0.05 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 2 --gap 0.05 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 3 --gap 0.05 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 4 --gap 0.05 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 0 --gap 0.1 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 1 --gap 0.1 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 2 --gap 0.1 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 3 --gap 0.1 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
-learn --expert saa --scenarios 30 --seed 4 --gap 0.1 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
+learn --expert greedy --scenarios 1 --seed 0 --mode oneshot --episodes 4000 --save-data
+learn --expert greedy --scenarios 1 --seed 0 --mode dagger --episodes 4000 --save-data
+learn --expert greedy --scenarios 1 --seed 1 --mode oneshot --episodes 4000
+learn --expert greedy --scenarios 1 --seed 1 --mode dagger --episodes 4000
+learn --expert greedy --scenarios 1 --seed 2 --mode oneshot --episodes 4000
+learn --expert greedy --scenarios 1 --seed 2 --mode dagger --episodes 4000
+learn --expert greedy --scenarios 1 --seed 3 --mode oneshot --episodes 4000
+learn --expert greedy --scenarios 1 --seed 3 --mode dagger --episodes 4000
+learn --expert greedy --scenarios 1 --seed 4 --mode oneshot --episodes 4000
+learn --expert greedy --scenarios 1 --seed 4 --mode dagger --episodes 4000
+learn --expert msvv --scenarios 1 --seed 0 --mode oneshot --episodes 4000 --save-data
+learn --expert msvv --scenarios 1 --seed 0 --mode dagger --episodes 4000 --save-data
+learn --expert msvv --scenarios 1 --seed 1 --mode oneshot --episodes 4000
+learn --expert msvv --scenarios 1 --seed 1 --mode dagger --episodes 4000
+learn --expert msvv --scenarios 1 --seed 2 --mode oneshot --episodes 4000
+learn --expert msvv --scenarios 1 --seed 2 --mode dagger --episodes 4000
+learn --expert msvv --scenarios 1 --seed 3 --mode oneshot --episodes 4000
+learn --expert msvv --scenarios 1 --seed 3 --mode dagger --episodes 4000
+learn --expert msvv --scenarios 1 --seed 4 --mode oneshot --episodes 4000
+learn --expert msvv --scenarios 1 --seed 4 --mode dagger --episodes 4000
+learn --expert full --scenarios 1 --seed 0 --mode oneshot --episodes 4000 --save-data
+learn --expert full --scenarios 1 --seed 0 --mode dagger --episodes 4000 --save-data
+learn --expert full --scenarios 1 --seed 1 --mode oneshot --episodes 4000
+learn --expert full --scenarios 1 --seed 1 --mode dagger --episodes 4000
+learn --expert full --scenarios 1 --seed 2 --mode oneshot --episodes 4000
+learn --expert full --scenarios 1 --seed 2 --mode dagger --episodes 4000
+learn --expert full --scenarios 1 --seed 3 --mode oneshot --episodes 4000
+learn --expert full --scenarios 1 --seed 3 --mode dagger --episodes 4000
+learn --expert full --scenarios 1 --seed 4 --mode oneshot --episodes 4000
+learn --expert full --scenarios 1 --seed 4 --mode dagger --episodes 4000
+learn --expert det --scenarios 1 --seed 0 --mode oneshot --episodes 4000 --save-data
+learn --expert det --scenarios 1 --seed 0 --mode dagger --episodes 4000 --save-data
+learn --expert det --scenarios 1 --seed 1 --mode oneshot --episodes 4000
+learn --expert det --scenarios 1 --seed 1 --mode dagger --episodes 4000
+learn --expert det --scenarios 1 --seed 2 --mode oneshot --episodes 4000
+learn --expert det --scenarios 1 --seed 2 --mode dagger --episodes 4000
+learn --expert det --scenarios 1 --seed 3 --mode oneshot --episodes 4000
+learn --expert det --scenarios 1 --seed 3 --mode dagger --episodes 4000
+learn --expert det --scenarios 1 --seed 4 --mode oneshot --episodes 4000
+learn --expert det --scenarios 1 --seed 4 --mode dagger --episodes 4000
+learn --expert agg --scenarios 5 --seed 0 --mode oneshot --episodes 4000 --save-data
+learn --expert agg --scenarios 5 --seed 0 --mode dagger --episodes 4000 --save-data
+learn --expert agg --scenarios 5 --seed 1 --mode oneshot --episodes 4000
+learn --expert agg --scenarios 5 --seed 1 --mode dagger --episodes 4000
+learn --expert agg --scenarios 5 --seed 2 --mode oneshot --episodes 4000
+learn --expert agg --scenarios 5 --seed 2 --mode dagger --episodes 4000
+learn --expert agg --scenarios 5 --seed 3 --mode oneshot --episodes 4000
+learn --expert agg --scenarios 5 --seed 3 --mode dagger --episodes 4000
+learn --expert agg --scenarios 5 --seed 4 --mode oneshot --episodes 4000
+learn --expert agg --scenarios 5 --seed 4 --mode dagger --episodes 4000
+learn --expert agg --scenarios 15 --seed 0 --mode oneshot --episodes 4000 --save-data
+learn --expert agg --scenarios 15 --seed 0 --mode dagger --episodes 4000 --save-data
+learn --expert agg --scenarios 15 --seed 1 --mode oneshot --episodes 4000
+learn --expert agg --scenarios 15 --seed 1 --mode dagger --episodes 4000
+learn --expert agg --scenarios 15 --seed 2 --mode oneshot --episodes 4000
+learn --expert agg --scenarios 15 --seed 2 --mode dagger --episodes 4000
+learn --expert agg --scenarios 15 --seed 3 --mode oneshot --episodes 4000
+learn --expert agg --scenarios 15 --seed 3 --mode dagger --episodes 4000
+learn --expert agg --scenarios 15 --seed 4 --mode oneshot --episodes 4000
+learn --expert agg --scenarios 15 --seed 4 --mode dagger --episodes 4000
+learn --expert agg --scenarios 30 --seed 0 --mode oneshot --episodes 4000 --save-data
+learn --expert agg --scenarios 30 --seed 0 --mode dagger --episodes 4000 --save-data
+learn --expert agg --scenarios 30 --seed 1 --mode oneshot --episodes 4000
+learn --expert agg --scenarios 30 --seed 1 --mode dagger --episodes 4000
+learn --expert agg --scenarios 30 --seed 2 --mode oneshot --episodes 4000
+learn --expert agg --scenarios 30 --seed 2 --mode dagger --episodes 4000
+learn --expert agg --scenarios 30 --seed 3 --mode oneshot --episodes 4000
+learn --expert agg --scenarios 30 --seed 3 --mode dagger --episodes 4000
+learn --expert agg --scenarios 30 --seed 4 --mode oneshot --episodes 4000
+learn --expert agg --scenarios 30 --seed 4 --mode dagger --episodes 4000
+learn --expert saa --scenarios 5 --seed 0 --mode oneshot --episodes 4000 --save-data
+learn --expert saa --scenarios 5 --seed 0 --mode dagger --episodes 4000 --save-data
+learn --expert saa --scenarios 5 --seed 1 --mode oneshot --episodes 4000
+learn --expert saa --scenarios 5 --seed 1 --mode dagger --episodes 4000
+learn --expert saa --scenarios 5 --seed 2 --mode oneshot --episodes 4000
+learn --expert saa --scenarios 5 --seed 2 --mode dagger --episodes 4000
+learn --expert saa --scenarios 5 --seed 3 --mode oneshot --episodes 4000
+learn --expert saa --scenarios 5 --seed 3 --mode dagger --episodes 4000
+learn --expert saa --scenarios 5 --seed 4 --mode oneshot --episodes 4000
+learn --expert saa --scenarios 5 --seed 4 --mode dagger --episodes 4000
+learn --expert saa --scenarios 15 --seed 0 --mode oneshot --episodes 4000 --save-data
+learn --expert saa --scenarios 15 --seed 0 --mode dagger --episodes 4000 --save-data
+learn --expert saa --scenarios 15 --seed 1 --mode oneshot --episodes 4000
+learn --expert saa --scenarios 15 --seed 1 --mode dagger --episodes 4000
+learn --expert saa --scenarios 15 --seed 2 --mode oneshot --episodes 4000
+learn --expert saa --scenarios 15 --seed 2 --mode dagger --episodes 4000
+learn --expert saa --scenarios 15 --seed 3 --mode oneshot --episodes 4000
+learn --expert saa --scenarios 15 --seed 3 --mode dagger --episodes 4000
+learn --expert saa --scenarios 15 --seed 4 --mode oneshot --episodes 4000
+learn --expert saa --scenarios 15 --seed 4 --mode dagger --episodes 4000
+learn --expert saa --scenarios 30 --seed 0 --mode oneshot --episodes 4000 --save-data
+learn --expert saa --scenarios 30 --seed 0 --mode dagger --episodes 4000 --save-data
+learn --expert saa --scenarios 30 --seed 1 --mode oneshot --episodes 4000
+learn --expert saa --scenarios 30 --seed 1 --mode dagger --episodes 4000
+learn --expert saa --scenarios 30 --seed 2 --mode oneshot --episodes 4000
+learn --expert saa --scenarios 30 --seed 2 --mode dagger --episodes 4000
+learn --expert saa --scenarios 30 --seed 3 --mode oneshot --episodes 4000
+learn --expert saa --scenarios 30 --seed 3 --mode dagger --episodes 4000
+learn --expert saa --scenarios 30 --seed 4 --mode oneshot --episodes 4000
+learn --expert saa --scenarios 30 --seed 4 --mode dagger --episodes 4000
+learn --expert saa --scenarios 30 --seed 0 --gap 0.01 --mode dagger --episodes 4000
+learn --expert saa --scenarios 30 --seed 1 --gap 0.01 --mode dagger --episodes 4000
+learn --expert saa --scenarios 30 --seed 2 --gap 0.01 --mode dagger --episodes 4000
+learn --expert saa --scenarios 30 --seed 3 --gap 0.01 --mode dagger --episodes 4000
+learn --expert saa --scenarios 30 --seed 4 --gap 0.01 --mode dagger --episodes 4000
+learn --expert saa --scenarios 30 --seed 0 --gap 0.05 --mode dagger --episodes 4000
+learn --expert saa --scenarios 30 --seed 1 --gap 0.05 --mode dagger --episodes 4000
+learn --expert saa --scenarios 30 --seed 2 --gap 0.05 --mode dagger --episodes 4000
+learn --expert saa --scenarios 30 --seed 3 --gap 0.05 --mode dagger --episodes 4000
+learn --expert saa --scenarios 30 --seed 4 --gap 0.05 --mode dagger --episodes 4000
+learn --expert saa --scenarios 30 --seed 0 --gap 0.1 --mode dagger --episodes 4000
+learn --expert saa --scenarios 30 --seed 1 --gap 0.1 --mode dagger --episodes 4000
+learn --expert saa --scenarios 30 --seed 2 --gap 0.1 --mode dagger --episodes 4000
+learn --expert saa --scenarios 30 --seed 3 --gap 0.1 --mode dagger --episodes 4000
+learn --expert saa --scenarios 30 --seed 4 --gap 0.1 --mode dagger --episodes 4000

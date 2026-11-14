@@ -6,7 +6,11 @@ Sub-commands:
 * ``expert``: online performance of an expert used directly as a policy.
 * ``learn``: imitation learning (one-shot or DAgger) from an expert.
 
-All results are written as CSV/JSON files under ``--out``.
+All results are written as CSV/JSON files under ``--out``. The defaults
+reproduce the protocol of the physician-to-patient study (``ppa/``): 4,000
+training episodes, DAgger with 10 episodes per iteration and a retraining
+after every iteration, 100 training epochs, actions sampled from the learned
+policy, and expert MIPs stopped at a 2% gap or after 30 seconds.
 """
 
 from __future__ import annotations
@@ -19,6 +23,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
+import torch
 
 from ilco_adwords.experts import EXPERT_KINDS, Expert
 from ilco_adwords.market import Market, make_market, sample_episode
@@ -32,6 +37,7 @@ def _market(args: argparse.Namespace) -> Market:
         seed=args.market_seed,
         tightness=args.tightness,
         premium_tightness=args.premium_tightness,
+        count_std=(args.regular_std, args.premium_std),
     )
 
 
@@ -79,6 +85,7 @@ def _expert(args: argparse.Namespace) -> Expert:
         n_scenarios=args.scenarios,
         mip_gap=args.gap,
         time_limit=args.time_limit,
+        sample_vote=args.sample_vote,
     )
 
 
@@ -129,6 +136,25 @@ def _evaluate(runner: Runner, policy: NumpyPolicy, split: str, n: int) -> list:
     return runner.run(split_seeds(split, n), policy=policy)
 
 
+def _train(
+    args: argparse.Namespace,
+    data: dict[str, np.ndarray],
+    seed: int,
+    init: NumpyPolicy | None = None,
+) -> tuple[NumpyPolicy, dict]:
+    policy, stats = train_policy(
+        data["x"],
+        data["target"],
+        data["mask"],
+        seed=seed,
+        batch_size=args.batch_size,
+        max_epochs=args.epochs,
+        patience=args.patience,
+        init=init,
+    )
+    return policy.with_sampling(args.policy_action == "sample"), asdict(stats)
+
+
 def cmd_learn(args: argparse.Namespace) -> None:
     """Learn a policy from an expert with one-shot cloning or DAgger."""
     market = _market(args)
@@ -137,6 +163,8 @@ def cmd_learn(args: argparse.Namespace) -> None:
     out = Path(args.out) / tag
     out.mkdir(parents=True, exist_ok=True)
     runner = Runner(market, args.workers)
+    # The pool workers are idle while the network trains.
+    torch.set_num_threads(max(1, args.workers))
     start = time.perf_counter()
     label_seconds = 0.0
     curve = []
@@ -172,10 +200,8 @@ def cmd_learn(args: argparse.Namespace) -> None:
         for size in sizes:
             keep = np.isin(data_all["episode"], train_seeds[:size])
             data = {k: v[keep] for k, v in data_all.items()}
-            policy, stats = train_policy(
-                data["x"], data["target"], data["mask"], seed=args.seed
-            )
-            checkpoint(policy, 0, size, asdict(stats))
+            policy, stats = _train(args, data, args.seed)
+            checkpoint(policy, 0, size, stats)
         data = data_all
     else:
         per_it = args.per_iteration
@@ -191,12 +217,14 @@ def cmd_learn(args: argparse.Namespace) -> None:
             data = _merge(data, _stack(results))
             last = it == n_it - 1
             if (it + 1) % args.retrain_every == 0 or it == 0 or last:
-                policy, stats = train_policy(
-                    data["x"], data["target"], data["mask"], seed=args.seed + it
-                )
-                checkpoint(policy, it + 1, (it + 1) * per_it, asdict(stats))
+                init = policy if args.warm_start else None
+                policy, stats = _train(args, data, args.seed + it, init)
+                checkpoint(policy, it + 1, (it + 1) * per_it, stats)
 
     test = _evaluate(runner, best["policy"], "test", args.n_test)
+    # The same weights with the other action rule (mode vs. sampling).
+    other = best["policy"].with_sampling(not best["policy"].sample)
+    test_other = _evaluate(runner, other, "test", args.n_test)
     runner.close()
     summary = {
         "expert": expert.name,
@@ -207,12 +235,23 @@ def cmd_learn(args: argparse.Namespace) -> None:
         "seed": args.seed,
         "episodes": args.episodes,
         "best": best["row"],
+        "policy_action": args.policy_action,
         "test_revenue": float(np.mean([r.revenue for r in test])),
+        "test_revenue_mode": float(
+            np.mean([r.revenue for r in (test if other.sample else test_other)])
+        ),
+        "test_revenue_sample": float(
+            np.mean([r.revenue for r in (test_other if other.sample else test)])
+        ),
         "label_seconds": label_seconds,
         "wall_seconds": time.perf_counter() - start,
         "curve": curve,
     }
     _write_episodes(out / "test.csv", test, summary)
+    # Per-episode results of both action rules, for paired comparisons.
+    rule_other = "sample" if other.sample else "mode"
+    _write_episodes(out / f"test_{args.policy_action}.csv", test, summary)
+    _write_episodes(out / f"test_{rule_other}.csv", test_other, summary)
     np.savez_compressed(
         out / "policy.npz", *[a for wb in best["policy"].weights for a in wb]
     )
@@ -231,11 +270,21 @@ def build_parser() -> argparse.ArgumentParser:
     """Return the argument parser of the command-line interface."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", default=os.environ.get("ADWORDS_OUT", "results"))
+    parser.add_argument(
+        "--out-suffix", default="", help="appended to --out (e.g. per variant)"
+    )
     parser.add_argument("--market-seed", type=int, default=0)
     parser.add_argument("--tightness", type=float, default=1.2)
     parser.add_argument("--premium-tightness", type=float, default=0.7)
+    parser.add_argument("--regular-std", type=float, default=20.0)
+    parser.add_argument(
+        "--premium-std",
+        type=float,
+        default=10.0,
+        help="standard deviation of the number of premium queries",
+    )
     parser.add_argument("--workers", type=int, default=1)
-    parser.add_argument("--n-valid", type=int, default=300)
+    parser.add_argument("--n-valid", type=int, default=1000)
     parser.add_argument("--n-test", type=int, default=1000)
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -244,8 +293,14 @@ def build_parser() -> argparse.ArgumentParser:
     def expert_args(p: argparse.ArgumentParser) -> None:
         p.add_argument("--expert", choices=EXPERT_KINDS, required=True)
         p.add_argument("--scenarios", type=int, default=1)
-        p.add_argument("--gap", type=float, default=0.0)
-        p.add_argument("--time-limit", type=float, default=10.0)
+        p.add_argument("--gap", type=float, default=0.02)
+        p.add_argument("--time-limit", type=float, default=30.0)
+        p.add_argument(
+            "--sample-vote",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help="aggregated expert acts by sampling its votes (else majority)",
+        )
 
     p_exp = sub.add_parser("expert")
     expert_args(p_exp)
@@ -255,11 +310,26 @@ def build_parser() -> argparse.ArgumentParser:
     expert_args(p_learn)
     p_learn.add_argument("--mode", choices=("oneshot", "dagger"), default="oneshot")
     p_learn.add_argument("--seed", type=int, default=0)
-    p_learn.add_argument("--episodes", type=int, default=1000)
-    p_learn.add_argument("--sizes", type=int, nargs="*", default=[100, 250, 500])
+    p_learn.add_argument("--episodes", type=int, default=4000)
+    p_learn.add_argument(
+        "--sizes",
+        type=int,
+        nargs="*",
+        default=[],
+        help="one-shot: also train on these first episode counts",
+    )
     p_learn.add_argument("--per-iteration", type=int, default=10)
-    p_learn.add_argument("--retrain-every", type=int, default=5)
+    p_learn.add_argument("--retrain-every", type=int, default=1)
     p_learn.add_argument("--beta-decay", type=float, default=0.8)
+    p_learn.add_argument(
+        "--policy-action", choices=("sample", "mode"), default="sample"
+    )
+    p_learn.add_argument(
+        "--warm-start", action=argparse.BooleanOptionalAction, default=True
+    )
+    p_learn.add_argument("--epochs", type=int, default=100)
+    p_learn.add_argument("--batch-size", type=int, default=256)
+    p_learn.add_argument("--patience", type=int, default=None)
     p_learn.add_argument("--save-data", action="store_true")
     p_learn.set_defaults(func=cmd_learn)
     return parser
@@ -268,6 +338,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     """Parse the command line and run the selected sub-command."""
     args = build_parser().parse_args()
+    args.out = args.out + args.out_suffix
     args.func(args)
 
 

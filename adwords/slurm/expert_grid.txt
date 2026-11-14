@@ -8,7 +8,7 @@ expert --expert agg --scenarios 30
 expert --expert saa --scenarios 5
 expert --expert saa --scenarios 15
 expert --expert saa --scenarios 30
+expert --expert saa --scenarios 30 --gap 0.002
 expert --expert saa --scenarios 30 --gap 0.01
-expert --expert saa --scenarios 30 --gap 0.02
 expert --expert saa --scenarios 30 --gap 0.05
 expert --expert saa --scenarios 30 --gap 0.1

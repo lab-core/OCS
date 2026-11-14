@@ -18,6 +18,7 @@ from pathlib import Path
 import matplotlib
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402  (backend must be set first)
@@ -91,6 +92,10 @@ PPA_DAGGER = {
     "saa30": 1674.2,
 }
 PPA_ONLINE = {"greedy": 3380.1, "full": 1299.2, "saa30": 1647.2}
+# Protocol of the physician study: experts stopped at a 2% MIP gap, and the
+# two-stage baseline with 30 scenarios solved to a 0.2% gap.
+BASE_GAP = 0.02
+BASELINE_GAP = 0.002
 
 
 def regret(revenue: pd.Series, opt: pd.Series) -> pd.Series:
@@ -125,6 +130,11 @@ def load(results: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         meta = json.loads(path.read_text())
         df = pd.read_csv(path.with_suffix(".csv")).set_index("seed")
         reg = regret(df["revenue"], opt.loc[df.index])
+        mode_path = path.parent / "test_mode.csv"
+        reg_mode = np.nan
+        if mode_path.exists():
+            dm = pd.read_csv(mode_path).set_index("seed")
+            reg_mode = regret(dm["revenue"], opt.loc[dm.index]).mean()
         runs.append(
             {
                 "expert": meta["expert"],
@@ -132,6 +142,7 @@ def load(results: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
                 "mode": meta["mode"],
                 "seed": meta["seed"],
                 "regret": reg.mean(),
+                "regret_mode": reg_mode,
                 "best_episodes": meta["best"]["episodes"],
                 "label_hours": meta["label_seconds"] / 3600.0,
                 "wall_hours": meta["wall_seconds"] / 3600.0,
@@ -161,8 +172,8 @@ def fmt(mean: float, sd: float | None = None) -> str:
 
 def main_table(experts: pd.DataFrame, runs: pd.DataFrame, out: Path) -> pd.DataFrame:
     """Write the main AdWords table and return its numbers."""
-    exact_runs = runs[runs["gap"] == 0]
-    exact_exp = experts[experts["gap"] == 0].set_index("expert")
+    exact_runs = runs[np.isclose(runs["gap"], BASE_GAP)]
+    exact_exp = experts[np.isclose(experts["gap"], BASE_GAP)].set_index("expert")
     agg = (
         exact_runs.groupby(["expert", "mode"])
         .agg(
@@ -187,7 +198,7 @@ def main_table(experts: pd.DataFrame, runs: pd.DataFrame, out: Path) -> pd.DataF
         dag = agg[(agg.expert == name) & (agg["mode"] == "dagger")]
         if one.empty and dag.empty:
             continue
-        online = 0.0 if name == "full" else exact_exp["regret"].get(name, np.nan)
+        online = exact_exp["regret"].get(name, np.nan)
         o_m = one["regret"].iloc[0] if not one.empty else np.nan
         d_m = dag["regret"].iloc[0] if not dag.empty else np.nan
         hours = dag["hours"].iloc[0] if not dag.empty else np.nan
@@ -211,6 +222,15 @@ def main_table(experts: pd.DataFrame, runs: pd.DataFrame, out: Path) -> pd.DataF
         )
         if name in ("msvv", "det", "agg30"):
             lines.append(r"\addlinespace")
+    base = experts[
+        (experts.expert == "saa30") & np.isclose(experts["gap"], BASELINE_GAP)
+    ]
+    if not base.empty:
+        lines += [
+            r"\midrule",
+            r"\multicolumn{6}{@{}l}{\emph{Two-stage baseline:} $\pi^t_{30}$ online "
+            f"at a 0.2\\% gap, {base['regret'].iloc[0]:.2f}\\% regret}} \\\\",
+        ]
     lines += [r"\bottomrule", r"\end{tabular}"]
     (out / "tables" / "adwords_main.tex").write_text("\n".join(lines) + "\n")
     return pd.DataFrame(rows)
@@ -247,6 +267,146 @@ def gap_table(experts: pd.DataFrame, runs: pd.DataFrame, out: Path) -> pd.DataFr
     lines += [r"\bottomrule", r"\end{tabular}"]
     (out / "tables" / "adwords_gap.tex").write_text("\n".join(lines) + "\n")
     return agg
+
+
+def episode_regret(results: Path, expert: str, mode: str, gap: float) -> pd.Series:
+    """Per-test-episode regret of a configuration, averaged over seeds."""
+    opt = pd.read_csv(results / "hindsight_test.csv").set_index("seed")["hindsight"]
+    per_seed = []
+    for path in sorted(results.glob(f"{expert}_gap{gap:g}_{mode}_s*/test.csv")):
+        df = pd.read_csv(path).set_index("seed")
+        per_seed.append(regret(df["revenue"], opt.loc[df.index]))
+    if not per_seed:
+        return pd.Series(dtype=float)
+    return pd.concat(per_seed, axis=1).mean(axis=1)
+
+
+COMPARISONS = [
+    (("full", "oneshot"), ("det", "oneshot")),
+    (("det", "oneshot"), ("agg30", "oneshot")),
+    (("agg30", "oneshot"), ("saa5", "oneshot")),
+    (("saa5", "oneshot"), ("saa30", "oneshot")),
+    (("full", "oneshot"), ("full", "dagger")),
+    (("det", "oneshot"), ("det", "dagger")),
+    (("agg30", "oneshot"), ("agg30", "dagger")),
+    (("saa30", "oneshot"), ("saa30", "dagger")),
+    (("saa30", "dagger"), ("saa5", "oneshot")),
+]
+MODE_LABEL = {"oneshot": "one-shot", "dagger": "DAgger"}
+
+
+def paired_tests(results: Path, out: Path) -> pd.DataFrame:
+    """Compare configurations on the shared test episodes.
+
+    For every pair, the per-episode regrets (averaged over seeds) are compared
+    with a Wilcoxon signed-rank test; the table gives the mean difference
+    (first minus second, in percentage points), its 95% confidence interval
+    and the p-value.
+    """
+    rows = []
+    for (e1, m1), (e2, m2) in COMPARISONS:
+        a = episode_regret(results, e1, m1, BASE_GAP)
+        b = episode_regret(results, e2, m2, BASE_GAP)
+        if a.empty or b.empty:
+            continue
+        d = (a - b).dropna()
+        half = 1.96 * d.std() / np.sqrt(len(d))
+        rows.append(
+            {
+                "first": f"{SHORT[e1]} {MODE_LABEL[m1]}",
+                "second": f"{SHORT[e2]} {MODE_LABEL[m2]}",
+                "diff": d.mean(),
+                "low": d.mean() - half,
+                "high": d.mean() + half,
+                "p": stats.wilcoxon(d).pvalue if np.any(d != 0) else 1.0,
+                "n": len(d),
+            }
+        )
+    df = pd.DataFrame(rows)
+    lines = [
+        r"\begin{tabular}{@{}llrr@{}}",
+        r"\toprule",
+        r"First & Second & Difference (pp) [95\% CI] & $p$ \\",
+        r"\midrule",
+    ]
+    for _, r in df.iterrows():
+        p = "$<10^{-4}$" if r["p"] < 1e-4 else f"{r['p']:.3f}"
+        lines.append(
+            f"{r['first']} & {r['second']} & {r['diff']:+.2f} "
+            f"[{r['low']:+.2f}, {r['high']:+.2f}] & {p} \\\\"
+        )
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    (out / "tables" / "adwords_tests.tex").write_text("\n".join(lines) + "\n")
+    df.to_csv(out / "tables" / "adwords_tests.csv", index=False)
+    return df
+
+
+STD_LEVELS = (5, 10, 15)
+STD_EXPERTS = ("greedy", "full", "det", "agg5", "saa5")
+
+
+def std_table(results: Path, out: Path) -> pd.DataFrame | None:
+    """Table of the uncertainty study (spread of the premium count).
+
+    The main results directory holds the middle level; the other levels are
+    in sibling directories suffixed with ``_std<level>``.
+    """
+    rows = []
+    for level in STD_LEVELS:
+        folder = results if level == 10 else Path(f"{results}_std{level}")
+        if not (folder / "hindsight_test.csv").exists():
+            continue
+        experts, runs, _ = load(folder)
+        for name in STD_EXPERTS:
+            on = experts[(experts.expert == name) & np.isclose(experts.gap, BASE_GAP)]
+            one = runs[
+                (runs.expert == name)
+                & (runs["mode"] == "oneshot")
+                & np.isclose(runs.gap, BASE_GAP)
+            ]
+            rows.append(
+                {
+                    "std": level,
+                    "expert": name,
+                    "online": on["regret"].mean() if not on.empty else np.nan,
+                    "oneshot": one["regret"].mean() if not one.empty else np.nan,
+                    "sd": one["regret"].std() if len(one) > 1 else np.nan,
+                }
+            )
+    if not rows:
+        return None
+    df = pd.DataFrame(rows)
+    levels = sorted(df["std"].unique())
+    cols = "l" + "rr" * len(levels)
+    lines = [
+        rf"\begin{{tabular}}{{@{{}}{cols}@{{}}}}",
+        r"\toprule",
+        " & ".join(
+            ["$\\sigma$ premium"]
+            + [rf"\multicolumn{{2}}{{c}}{{{lv}}}" for lv in levels]
+        )
+        + r" \\",
+        "".join(
+            rf"\cmidrule(lr){{{2 + 2 * i}-{3 + 2 * i}}}" for i in range(len(levels))
+        ),
+        " & ".join(["Expert"] + ["online", "learned"] * len(levels)) + r" \\",
+        r"\midrule",
+    ]
+    for name in STD_EXPERTS:
+        cells = [LABELS[name]]
+        for lv in levels:
+            r = df[(df["std"] == lv) & (df.expert == name)]
+            if r.empty:
+                cells += ["--", "--"]
+                continue
+            on, le, sd = r.iloc[0][["online", "oneshot", "sd"]]
+            cells.append("--" if np.isnan(on) else f"{on:.2f}")
+            cells.append("--" if np.isnan(le) else fmt(le, sd))
+        lines.append(" & ".join(cells) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    (out / "tables" / "adwords_std.tex").write_text("\n".join(lines) + "\n")
+    df.to_csv(out / "tables" / "adwords_std.csv", index=False)
+    return df
 
 
 def fig_teacher(table: pd.DataFrame, out: Path) -> None:
@@ -318,7 +478,7 @@ def fig_teacher(table: pd.DataFrame, out: Path) -> None:
 
 def fig_curves(curves: pd.DataFrame, out: Path) -> None:
     """Plot DAgger validation regret against labelled episodes and time."""
-    sub = curves[(curves["mode"] == "dagger") & (curves.gap == 0)]
+    sub = curves[(curves["mode"] == "dagger") & np.isclose(curves.gap, BASE_GAP)]
     fig, axes = plt.subplots(1, 2, figsize=(9.0, 2.8), sharey=True)
     for name in ("full", "det", "agg30", "saa5", "saa15", "saa30"):
         d = sub[sub.expert == name]
@@ -330,7 +490,9 @@ def fig_curves(curves: pd.DataFrame, out: Path) -> None:
         axes[0].plot(g.index, g["r"], color=COLORS[name], label=SHORT[name], lw=1.3)
         axes[1].plot(g["h"], g["r"], color=COLORS[name], lw=1.3)
         one = curves[
-            (curves["mode"] == "oneshot") & (curves.expert == name) & (curves.gap == 0)
+            (curves["mode"] == "oneshot")
+            & (curves.expert == name)
+            & np.isclose(curves.gap, BASE_GAP)
         ]
         if not one.empty:
             best = one.groupby("seed")["val_regret"].min().mean()
@@ -354,7 +516,7 @@ def fig_behaviour(results: Path, out: Path, n_premium_adv: int = 3) -> None:
     bins = np.linspace(0, 1, 21)
     mid = 0.5 * (bins[1:] + bins[:-1])
     for name in ("full", "det", "agg30", "saa5", "saa30", "greedy"):
-        path = results / f"{name}_gap0_oneshot_s0" / "labels.npz"
+        path = results / f"{name}_gap{BASE_GAP:g}_oneshot_s0" / "labels.npz"
         if not path.exists():
             continue
         d = np.load(path)
@@ -394,6 +556,7 @@ def main() -> None:
         .agg(
             regret=("regret", "mean"),
             sd=("regret", "std"),
+            regret_mode=("regret_mode", "mean"),
             n=("seed", "count"),
             ep=("best_episodes", "mean"),
             label_h=("label_hours", "mean"),
@@ -403,6 +566,10 @@ def main() -> None:
     )
     table = main_table(experts, runs, paper)
     gap_table(experts, runs, paper)
+    print(paired_tests(results, paper).to_string())
+    std = std_table(results, paper)
+    if std is not None:
+        print(std.to_string())
     fig_teacher(table, paper)
     fig_curves(curves, paper)
     fig_behaviour(results, paper)

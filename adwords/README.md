@@ -59,17 +59,17 @@ python -m ilco_adwords.cli --workers 32 hindsight
 python -m ilco_adwords.cli --workers 32 expert --expert saa --scenarios 30
 # One learning run.
 python -m ilco_adwords.cli --workers 32 learn --expert saa --scenarios 5 \
-    --seed 0 --mode dagger --episodes 2000 --per-iteration 10 --retrain-every 10
+    --seed 0 --mode dagger
 ```
 
 To run the full study on Rorqual (account `def-legraina_cpu`):
 
 ```bash
 python slurm/make_grid.py
-sbatch --array=1-14 --cpus-per-task=32 --time=6:00:00 \
-    slurm/array.sh slurm/expert_grid.txt
-sbatch --array=1-120 --cpus-per-task=32 --time=8:00:00 \
-    slurm/array.sh slurm/learn_grid.txt
+sbatch --array=1-14 --time=3:00:00 slurm/array.sh slurm/expert_grid.txt
+# One-shot runs are the odd lines and DAgger runs the even lines (then 101-115).
+sbatch --array=1-99:2 --time=3:00:00 slurm/array.sh slurm/learn_grid.txt
+sbatch --array=2-100:2,101-115 --time=24:00:00 slurm/array.sh slurm/learn_grid.txt
 ```
 
 Then run `python analysis/make_results.py RESULTS_DIR PAPER_DIR`. It writes
@@ -77,22 +77,25 @@ Then run `python analysis/make_results.py RESULTS_DIR PAPER_DIR`. It writes
 
 ## Experimental protocol
 
-Learning from each expert:
+The defaults of `ilco_adwords.cli` follow the physician study (`../ppa`).
 
-- **Episodes:** 2,000 expert-labelled training episodes, about 149 queries
-  each (≈298,000 labelled states).
-- **Validation and test:** 300 validation and 1,000 test episodes, shared by
-  all policies.
-- **Seeds:** 5 per configuration. The seed changes the training episodes, the
-  scenario samples and the network initialisation.
-- **One-shot cloning:** the expert controls all trajectories. Policies are
-  trained on the first 100, 250, 500, 1,000 and 2,000 episodes, and the best
-  size on validation is kept.
-- **DAgger:** 200 iterations of 10 episodes, with β₀ = 1 and βᵢ = 0.8ⁱ. The
-  policy is retrained every 10 iterations (100 episodes), and the best
-  retrained policy on validation is kept.
-- **Scenarios per label:** 1 for the deterministic expert, K ∈ {5, 15, 30} for
-  the aggregated and two-stage experts, and the realised future for the
-  full-information expert. Learned policies use no scenarios at test time.
-- **MIPs:** solved to optimality, except in the gap study of the 30-scenario
-  two-stage expert (1, 2, 5 and 10%).
+- **Episodes:** 4,000 expert-labelled training episodes, about 149 queries
+  each (≈600,000 labelled states).
+- **One-shot cloning:** the expert controls all 4,000 episodes, and one
+  policy is trained on them.
+- **DAgger:** 400 iterations of 10 episodes, with β₀ = 1 and βᵢ = 0.8ⁱ. The
+  policy is retrained after every iteration, warm-started from the previous
+  one. All 400 policies are scored on validation, and the best is kept.
+- **Training:** MLP with 2 hidden layers of 128 units, 100 epochs, batches of
+  256 and Adam (lr 10⁻³). Soft cross-entropy on the expert distribution, with
+  the best epoch chosen on a 20% hold-out.
+- **Learned policy:** the action is sampled from the predicted distribution
+  (`--policy-action sample`). Test results are also stored for the most likely
+  action (`test_mode.csv`).
+- **Aggregated expert:** executes an action sampled from its votes.
+- **Expert MIPs:** stopped at a 2% gap or after 30 s. The gap study adds 1, 5
+  and 10% for the 30-scenario two-stage expert. The two-stage baseline used
+  online is solved to a 0.2% gap.
+- **Evaluation:** 1,000 validation and 1,000 test episodes, shared by all
+  policies.
+- **Seeds:** 5 per configuration; the physician study used one.

@@ -63,12 +63,15 @@ class Expert:
         n_scenarios: Number of scenarios for ``agg`` and ``saa``.
         mip_gap: Relative MIP gap stopping criterion.
         time_limit: Time limit per MIP in seconds.
+        sample_vote: Whether the aggregated expert acts by sampling from its
+            votes (as in the physician study) instead of taking the majority.
     """
 
     kind: str
     n_scenarios: int = 1
     mip_gap: float = 0.0
     time_limit: float = 10.0
+    sample_vote: bool = False
 
     def __post_init__(self) -> None:
         """Validate the configuration."""
@@ -147,5 +150,9 @@ class Expert:
             solve_time += res.runtime
             gap = max(gap, _rel_gap(res.objective, res.bound))
         dist /= dist.sum()
-        action = int(np.argmax(dist))
+        if self.sample_vote:
+            # Physician study: the executed action is drawn from the votes.
+            action = int(rng.choice(size, p=dist))
+        else:
+            action = int(np.argmax(dist))
         return Label(action, dist, solve_time, gap)

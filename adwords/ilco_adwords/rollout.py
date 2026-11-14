@@ -87,6 +87,9 @@ def run_episode(
     """
     episode = sample_episode(market, np.random.default_rng(seed))
     rng = np.random.default_rng([seed, 7919])
+    # Separate stream for the learned policy, so that test episodes stay
+    # paired across policies whatever the expert does.
+    policy_rng = np.random.default_rng([seed, 104729])
     sim = Simulator(market, episode)
     xs, targets, masks, times, acts, classes = [], [], [], [], [], []
     solve_time = 0.0
@@ -110,7 +113,7 @@ def run_episode(
         if use_expert and label is not None:
             action = label.action
         elif policy is not None:
-            action = policy.act(market, state)
+            action = policy.act(market, state, policy_rng)
         else:
             raise ValueError("no policy to act")
         sim.step(action)

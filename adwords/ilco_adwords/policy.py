@@ -81,9 +81,12 @@ class NumpyPolicy:
 
     Attributes:
         weights: List of (W, b) pairs.
+        sample: Whether ``act`` samples from the predicted distribution (as in
+            the physician study) instead of taking its mode.
     """
 
     weights: list[tuple[np.ndarray, np.ndarray]]
+    sample: bool = False
 
     @classmethod
     def from_torch(cls, model: MLP) -> NumpyPolicy:
@@ -104,11 +107,34 @@ class NumpyPolicy:
         w, b = self.weights[-1]
         return h @ w + b
 
-    def act(self, market: Market, state: State) -> int:
-        """Return the most likely feasible action in a state."""
+    def act(
+        self, market: Market, state: State, rng: np.random.Generator | None = None
+    ) -> int:
+        """Return a feasible action in a state.
+
+        Args:
+            market: The market.
+            state: Current state.
+            rng: Generator used when ``sample`` is True.
+
+        Returns:
+            The sampled action if ``sample`` is True, else the most likely one.
+
+        Raises:
+            ValueError: If sampling is requested without a generator.
+        """
         out = self.logits(features(market, state))
         out = np.where(feasible_mask(market, state), out, NEG_INF)
-        return int(np.argmax(out))
+        if not self.sample:
+            return int(np.argmax(out))
+        if rng is None:
+            raise ValueError("a sampling policy needs a random generator")
+        prob = np.exp(out - out.max())
+        return int(rng.choice(prob.size, p=prob / prob.sum()))
+
+    def with_sampling(self, sample: bool) -> NumpyPolicy:
+        """Return a copy sharing the weights with another action rule."""
+        return NumpyPolicy(self.weights, sample)
 
 
 @dataclass
@@ -138,9 +164,11 @@ def train_policy(
     hidden: int = 128,
     depth: int = 2,
     lr: float = 1e-3,
-    batch_size: int = 512,
-    max_epochs: int = 60,
-    patience: int = 8,
+    batch_size: int = 256,
+    max_epochs: int = 100,
+    patience: int | None = None,
+    val_fraction: float = 0.2,
+    init: NumpyPolicy | None = None,
 ) -> tuple[NumpyPolicy, TrainStats]:
     """Train an MLP policy by (soft) behavioural cloning.
 
@@ -154,23 +182,32 @@ def train_policy(
         lr: Adam learning rate.
         batch_size: Mini-batch size.
         max_epochs: Maximum number of epochs.
-        patience: Early-stopping patience in epochs.
+        patience: Early-stopping patience in epochs (None trains for
+            ``max_epochs`` epochs, as in the physician study).
+        val_fraction: Fraction of the samples held out to select the epoch.
+        init: Policy whose weights initialise the network (warm start).
 
     Returns:
-        The best policy on the 10% hold-out set and training statistics.
+        The policy with the best hold-out loss and training statistics.
     """
     start = time.perf_counter()
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     n = x.shape[0]
     perm = rng.permutation(n)
-    n_val = max(1, n // 10)
+    n_val = max(1, int(n * val_fraction))
     val_idx, tr_idx = perm[:n_val], perm[n_val:]
     xt = torch.from_numpy(x.astype(np.float32))
     yt = torch.from_numpy(target.astype(np.float32))
     mt = torch.from_numpy(mask.astype(bool))
 
     model = MLP(x.shape[1], target.shape[1], hidden, depth)
+    if init is not None:
+        linear = [m for m in model.net if isinstance(m, nn.Linear)]
+        with torch.no_grad():
+            for m, (w, b) in zip(linear, init.weights, strict=True):
+                m.weight.copy_(torch.from_numpy(w.T))
+                m.bias.copy_(torch.from_numpy(b))
     opt = torch.optim.Adam(model.parameters(), lr=lr)
 
     def loss_fn(idx: torch.Tensor) -> torch.Tensor:
@@ -202,7 +239,7 @@ def train_policy(
             best_state = {k: v.clone() for k, v in model.state_dict().items()}
         else:
             wait += 1
-            if wait >= patience:
+            if patience is not None and wait >= patience:
                 break
     if best_state is not None:
         model.load_state_dict(best_state)
