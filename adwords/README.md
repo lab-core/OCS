@@ -99,3 +99,22 @@ The defaults of `ilco_adwords.cli` follow the physician study (`../ppa`).
 - **Evaluation:** 1,000 validation and 1,000 test episodes, shared by all
   policies.
 - **Seeds:** 5 per configuration; the physician study used one.
+
+## Calibration of the budgets
+
+`scripts/calibrate.py 100 32` scores each setting on 100 calibration episodes,
+which are disjoint from the training, validation and test episodes. The score
+is the margin of the two-stage expert (10 scenarios) over the best myopic rule,
+with ties broken by its margin over the deterministic expert. The numbers are
+revenue as a fraction of the hindsight optimum:
+
+| regular | premium | greedy | MSVV | det. | agg-10 | 2S-10 | score |
+|---|---|---|---|---|---|---|---|
+| 0.8 | 0.7 | 0.955 | 0.971 | 0.979 | 0.981 | 0.995 | 0.024 |
+| 0.8 | 1.0 | 0.949 | 0.966 | 0.974 | 0.977 | 0.990 | 0.024 |
+| 1.0 | 0.7 | 0.915 | 0.939 | 0.962 | 0.965 | 0.991 | 0.051 |
+| 1.0 | 1.0 | 0.914 | 0.931 | 0.956 | 0.961 | 0.983 | 0.053 |
+| **1.2** | **0.7** | 0.885 | 0.904 | 0.950 | 0.960 | 0.989 | **0.085** |
+| 1.2 | 1.0 | 0.886 | 0.903 | 0.944 | 0.951 | 0.978 | 0.076 |
+
+The selected setting (1.2, 0.7) is the default of `ilco_adwords.cli`.
