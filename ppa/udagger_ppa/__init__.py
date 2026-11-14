@@ -1,14 +1,13 @@
-"""The physician-to-patient assignment problem as a ``udagger`` example.
+"""The dynamic physician-to-patient assignment problem, a ``udagger`` example.
 
-The simulator, the state features and the optimisation experts are those of
-the original study (``ppa/src``), used unchanged; this package only adapts
-them to the ``udagger`` interfaces. The original modules use flat imports
-(``from OCS import ...``), so ``ppa/src`` is added to the import path.
+Modules:
+
+* ``instance``: instance parameters and episode seeds;
+* ``scheduler``: simulator and deterministic MIP (from the original study);
+* ``stochastic``: two-stage stochastic MIP (from the original study);
+* ``features``: state features of the learned policy;
+* ``experts``: greedy, full-information, deterministic, aggregated and
+  two-stage experts;
+* ``problem``: the problem and its episodes for ``udagger``;
+* ``cli``: the ``hindsight``, ``expert`` and ``learn`` commands.
 """
-
-import sys
-from pathlib import Path
-
-_SRC = str(Path(__file__).resolve().parents[1] / "src")
-if _SRC not in sys.path:
-    sys.path.insert(0, _SRC)

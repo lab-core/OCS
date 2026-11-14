@@ -4,7 +4,7 @@ The settings follow the protocol of the physician-to-patient study: 4,000
 training episodes, DAgger with 10 episodes per iteration and a retraining after
 every iteration, expert MIPs stopped at a 2% gap (or 30 s), and a two-stage
 baseline with 30 scenarios solved to a 0.2% gap. These are the defaults of
-``ilco_adwords.cli``; only the varying arguments are written here.
+``udagger_adwords.cli``; only the varying arguments are written here.
 """
 
 from __future__ import annotations

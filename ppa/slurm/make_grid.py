@@ -1,62 +1,61 @@
-"""Write the job lines of the PPA rerun (protocol of the IJOO study).
+"""Write the job lines of the PPA experiments for ``slurm/array.sh``.
 
-Experts are configured as in ``utility.build_config``: ``--stoch 0`` solves
-independent deterministic models (``--new 0``: realised future, i.e. the
-full-information expert; ``--new 1``: sampled futures, deterministic for one
-scenario and aggregated for several), and ``--stoch 1`` the two-stage model.
+Same protocol and layout as ``adwords/slurm/make_grid.py``: every expert
+learned with one-shot cloning and DAgger (4,000 episodes, 3 replicates),
+the MIP-gap study of the two-stage expert with 30 scenarios, and the experts
+used online on the test episodes (with the two-stage baseline at a 0.2% gap).
+Run from the repository root::
+
+    python ppa/slurm/make_grid.py
+    sbatch --array=1-14 slurm/array.sh ppa ppa/slurm/expert_grid.txt
+    sbatch --array=1-57 --time=7-00:00:00 slurm/array.sh ppa ppa/slurm/learn_grid.txt
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-EXPERTS = {
-    "full": "--stoch 0 --new 0 --scenarios 1",
-    "det": "--stoch 0 --new 1 --scenarios 1",
-    "agg5": "--stoch 0 --new 1 --scenarios 5",
-    "agg15": "--stoch 0 --new 1 --scenarios 15",
-    "agg30": "--stoch 0 --new 1 --scenarios 30",
-    "saa5": "--stoch 1 --new 1 --scenarios 5",
-    "saa15": "--stoch 1 --new 1 --scenarios 15",
-    "saa30": "--stoch 1 --new 1 --scenarios 30",
-}
-REPS = range(3)
+EXPERTS = [
+    ("full", 1),
+    ("det", 1),
+    ("agg", 5),
+    ("agg", 15),
+    ("agg", 30),
+    ("saa", 5),
+    ("saa", 15),
+    ("saa", 30),
+]
+SEEDS = range(3)
 EXTRA_GAPS = (0.01, 0.05, 0.1)
 BASELINE_GAP = 0.002
-
-
-def line(**kw: object) -> str:
-    """Format one grid line as shell assignments."""
-    return " ".join(
-        f'{k}="{v}"' if k == "expert" else f"{k}={v}" for k, v in kw.items()
-    )
+EPISODES = 4000
 
 
 def main() -> None:
-    """Write ``oneshot_grid.txt``, ``dagger_grid.txt`` and ``expert_grid.txt``."""
-    here = Path(__file__).parent
-    for mode in ("oneshot", "dagger"):
-        rows = [
-            line(kind="learn", mode=mode, expert=opts, rep=r)
-            for opts in EXPERTS.values()
-            for r in REPS
-        ]
-        if mode == "dagger":
-            rows += [
-                line(kind="learn", mode=mode, expert=EXPERTS["saa30"], mg=g, rep=r)
-                for g in EXTRA_GAPS
-                for r in REPS
-            ]
-        (here / f"{mode}_grid.txt").write_text("\n".join(rows) + "\n")
-    rows = [line(kind="greedy"), line(kind="hindsight", mg=0, tl=300)]
-    rows += [line(kind="expert", expert=o) for k, o in EXPERTS.items() if k != "full"]
-    rows += [
-        line(kind="expert", expert=EXPERTS["saa30"], mg=g)
+    """Write ``learn_grid.txt`` and ``expert_grid.txt`` next to this script."""
+    learn = []
+    for kind, k in EXPERTS:
+        for seed in SEEDS:
+            save = " --save-data" if seed == 0 else ""
+            base = f"learn --expert {kind} --scenarios {k} --seed {seed}"
+            learn.append(f"{base} --mode oneshot --episodes {EPISODES}{save}")
+            learn.append(f"{base} --mode dagger --episodes {EPISODES}{save}")
+    for gap in EXTRA_GAPS:
+        for seed in SEEDS:
+            learn.append(
+                f"learn --expert saa --scenarios 30 --seed {seed} --gap {gap} "
+                f"--mode dagger --episodes {EPISODES}"
+            )
+    experts = ["hindsight", "expert --expert greedy"]
+    experts += [f"expert --expert {kind} --scenarios {k}" for kind, k in EXPERTS]
+    experts += [
+        f"expert --expert saa --scenarios 30 --gap {g}"
         for g in (BASELINE_GAP, *EXTRA_GAPS)
     ]
-    (here / "expert_grid.txt").write_text("\n".join(rows) + "\n")
-    for f in ("oneshot", "dagger", "expert"):
-        print(f, len((here / f"{f}_grid.txt").read_text().splitlines()))
+    here = Path(__file__).parent
+    (here / "learn_grid.txt").write_text("\n".join(learn) + "\n")
+    (here / "expert_grid.txt").write_text("\n".join(experts) + "\n")
+    print(len(learn), "learning runs,", len(experts), "expert evaluations")
 
 
 if __name__ == "__main__":

@@ -6,14 +6,14 @@ import numpy as np
 import pytest
 from udagger import NumpyPolicy, run_episode, stack, train_policy
 
-from ilco_adwords.env import (
+from udagger_adwords.env import (
     Simulator,
     feasible_mask,
     remaining_count_posterior,
     sample_future_counts,
 )
-from ilco_adwords.experts import Expert
-from ilco_adwords.market import (
+from udagger_adwords.experts import Expert
+from udagger_adwords.market import (
     PREMIUM,
     REGULAR,
     Episode,
@@ -21,8 +21,9 @@ from ilco_adwords.market import (
     make_market,
     sample_episode,
 )
-from ilco_adwords.problem import AdwordsProblem, features
-from ilco_adwords.solver import offline_optimum, solve_count_mip
+from udagger_adwords.features import features
+from udagger_adwords.problem import AdwordsProblem
+from udagger_adwords.solver import offline_optimum, solve_count_mip
 
 
 @pytest.fixture(scope="module")

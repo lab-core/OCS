@@ -1,3 +1,9 @@
+"""Simulator and deterministic MIP of the physician-to-patient assignment.
+
+Moved from ``src/OCS.py`` of the original study; only the command-line demo
+and the memory tracker were removed.
+"""
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -17,37 +23,28 @@ from typing import List, Tuple, Dict
 from pyomo.environ import ConcreteModel, Constraint, Var, Objective
 from pyomo.environ import Binary, NonNegativeIntegers, minimize, value, NonNegativeReals
 from pyomo.opt import SolverFactory
-from utility import parse_args, build_config
 from scipy.stats import beta as beta_dist, norm, binom, truncnorm
 from typing import Optional
-import psutil, threading
 
-
-
-def track_memory(interval=0.5):
-    proc = psutil.Process(os.getpid())
-    peak = 0
-    while not stop_flag:
-        mem = proc.memory_info().rss
-        peak = max(peak, mem)
-        time.sleep(interval)
-    print(f"[MEMORY] Peak usage: {peak / (1024**3):.2f} GB")
 
 @dataclass
 class Patient:
-    pid: str            # external id
-    _id: int            # internal id (0..N-1)
-    duration: float     # service duration in minutes (if shows)
-    preferred_phys: int # index of preferred physician (0..P-1)
-    preferred_slot:int
-    priority: int      
+    pid: str  # external id
+    _id: int  # internal id (0..N-1)
+    duration: float  # service duration in minutes (if shows)
+    preferred_phys: int  # index of preferred physician (0..P-1)
+    preferred_slot: int
+    priority: int
     A: Dict[Tuple[int, int], int]  # acceptability for (p,i)
-    Y: Dict[int, int]        # pre-sampled show indicator by physician p
-    score:float
-    eligible: Dict[int, int]  
+    Y: Dict[int, int]  # pre-sampled show indicator by physician p
+    score: float
+    eligible: Dict[int, int]
+
+
 # ------------------------------------------------------------
 # Appointment Scheduler (Full-Information via Pre-Sampled Shows)
 # ------------------------------------------------------------
+
 
 class AppointmentScheduler:
     """
@@ -61,6 +58,7 @@ class AppointmentScheduler:
     We pre-sample per-patient attendance indicators Y[n,p] once
     and treat them as constants to approximate expected workload/overtime.
     """
+
     def __init__(
         self,
         n_patients1: int = 25,
@@ -72,22 +70,22 @@ class AppointmentScheduler:
         slot_minutes: int = 30,
         show_prob: float = 1,
         accept_prob: float = 1,
-        c_wait: int = 1,           # deprecated (unused), kept for API compatibility
-        c_miss_1: int = 80,        # rejection cost for P1
-        c_miss_2: int = 50,        # rejection cost for P2
-        c_overtime: int = 4,       # overtime cost per minute
-        c_np_per:int=10,
+        c_wait: int = 1,  # deprecated (unused), kept for API compatibility
+        c_miss_1: int = 80,  # rejection cost for P1
+        c_miss_2: int = 50,  # rejection cost for P2
+        c_overtime: int = 4,  # overtime cost per minute
+        c_np_per: int = 10,
         release_cap: Optional[int] = None,
         cap_per_phys: int = 25,
-        k_max:Optional[int] = None,
-        k_min:Optional[int] = None,
+        k_max: Optional[int] = None,
+        k_min: Optional[int] = None,
         physician_weights: bool = False,
-        var:int=0,
+        var: int = 0,
         seed: int = 123,
         time_limit: int = 30,
-        mipgap:int = 0,
+        mipgap: int = 0,
         out_dir: str = "../data/Deterministic/",
-        suffix: bool= True
+        suffix: bool = True,
     ):
         # Sizes / time structure
         self.N1 = n_patients1
@@ -102,28 +100,35 @@ class AppointmentScheduler:
         # Behavior parameters
         self.accept_prob = accept_prob
         self.show_prob = show_prob
-        
+
         # Costs
         self.c_miss_1 = c_miss_1
         self.c_miss_2 = c_miss_2
         self.c_o = c_overtime
         self.var = var
         self.c_np_per = c_np_per
-        self.c_nonpref_1 = c_np_per/100 * c_miss_1
-        self.c_nonpref_2 = c_np_per/100 * c_miss_2
-        self.MAX_OVERTIME = 60   # Hard cap on overtime (minutes)
+        self.c_nonpref_1 = c_np_per / 100 * c_miss_1
+        self.c_nonpref_2 = c_np_per / 100 * c_miss_2
+        self.MAX_OVERTIME = 60  # Hard cap on overtime (minutes)
         # note: c_wait is intentionally not stored (deprecated / unused)
 
         # Optional constraints / I/O / reproducibility
         self.cap_per_phys = cap_per_phys
-        self.Rmax = release_cap if release_cap is not None else (self.cap_per_phys) * self.P
+        self.Rmax = (
+            release_cap if release_cap is not None else (self.cap_per_phys) * self.P
+        )
         self.seed = seed
         self.time_limit = time_limit
         self.mipgap = mipgap
-        self.out_dir = out_dir + f"Instances_N{n_patients1}-{n_patients2}_s{sigma1}-{sigma2}_P{n_phys}_I{n_slots}_L{cap_per_phys}_{k_min}_{k_max}_{physician_weights}_{c_miss_1}_{c_miss_2}_{c_overtime}_{c_np_per}" if suffix else out_dir
+        self.out_dir = (
+            out_dir
+            + f"Instances_N{n_patients1}-{n_patients2}_s{sigma1}-{sigma2}_P{n_phys}_I{n_slots}_L{cap_per_phys}_{k_min}_{k_max}_{physician_weights}_{c_miss_1}_{c_miss_2}_{c_overtime}_{c_np_per}"
+            if suffix
+            else out_dir
+        )
         self.eligibility_mode = "dirichlet_topk"
-        if  self.eligibility_mode == "dirichlet_topk":
-            
+        if self.eligibility_mode == "dirichlet_topk":
+
             self.k_min = max(1, k_min) if k_min is not None else n_phys
             self.k_max = min(k_max, n_phys) if k_max is not None else n_phys
             if not physician_weights:
@@ -140,7 +145,6 @@ class AppointmentScheduler:
 
         # Independent RNGs
         self._init_rngs(seed)
-    
 
         # Populated by generate_instance()
         self.patients: List[Patient] = []
@@ -156,9 +160,9 @@ class AppointmentScheduler:
         self.duration_generator = np.random.default_rng(streams[0])
         self.phys_generator = np.random.default_rng(streams[1])
         self.show_generator = np.random.default_rng(streams[2])
-        self.rank_generator = np.random.default_rng(streams[3])     # arrival order score
-        #self.jitter_generator = np.random.default_rng(streams[4])   # tie-break jitter
-        self.rejection_generator = np.random.default_rng(streams[5])# acceptability A
+        self.rank_generator = np.random.default_rng(streams[3])  # arrival order score
+        # self.jitter_generator = np.random.default_rng(streams[4])   # tie-break jitter
+        self.rejection_generator = np.random.default_rng(streams[5])  # acceptability A
         # Reserved / presently unused but preserved for API symmetry:
         self.slot_generator = np.random.default_rng(streams[6])
         self.priority_generator = np.random.default_rng(streams[7])
@@ -181,10 +185,14 @@ class AppointmentScheduler:
         (beta-distributed, P1 skew late; P2 uniform) with small jitter for stability.
         After sorting, overwrite IDs to reflect arrival order.
         """
-        
+
         self.patients.clear()
-        self.N_p1 = max(0,int(round(self.p_generator.normal(loc=self.N1, scale=self.sigma1))))
-        self.N_p2 = max(0, int(round(self.p_generator.normal(loc=self.N2, scale=self.sigma2))))
+        self.N_p1 = max(
+            0, int(round(self.p_generator.normal(loc=self.N1, scale=self.sigma1)))
+        )
+        self.N_p2 = max(
+            0, int(round(self.p_generator.normal(loc=self.N2, scale=self.sigma2)))
+        )
         self.N_total = self.N_p1 + self.N_p2
         for n in range(self.N_p1):
             self.patients.append(self.generate_patient(n, 1))
@@ -192,15 +200,15 @@ class AppointmentScheduler:
             self.patients.append(self.generate_patient(n, 2))
 
         # jitter to break ties deterministically
-        #jitter = self.jitter_generator.uniform(0, 1e-9, size=len(self.patients))
-        ordered = sorted(self.patients, key=lambda p: (p.score ))#+ jitter[p._id]
+        # jitter = self.jitter_generator.uniform(0, 1e-9, size=len(self.patients))
+        ordered = sorted(self.patients, key=lambda p: (p.score))  # + jitter[p._id]
 
         # Overwrite IDs to arrival order
         for rank, p in enumerate(ordered):
             p._id = rank
             p.pid = f"pat_{p.priority}_{rank}"  # optional: encode priority+order
         self.patients = ordered
-        
+
         # if len(self.patients) >= 85:
         #     self.patients[84] = Patient(
         #         pid=f"pat_{1}_84",
@@ -214,8 +222,7 @@ class AppointmentScheduler:
         #         score=self.patients[84].score,
         #         eligible={0: 1, 1: 1, 2: 1, 3: 1},      # keep the eligibility snapshot if useful downstream
         #     )
-            
-        
+
     def _eligible_dirichlet_topk(self) -> tuple[dict[int, int], np.ndarray]:
         """
         Sample an eligible set E first using patient-specific tastes:
@@ -227,21 +234,23 @@ class AppointmentScheduler:
           taste: np.ndarray shape (P,) for downstream use (e.g., to choose preferred)
         """
         K = int(self.K_generator.integers(self.k_min, self.k_max + 1))
-    
+
         w = np.asarray(self.physician_weights, dtype=float)
         w = np.clip(w, 1e-9, None)
         w = w / w.sum()
-    
+
         alpha = self.alpha_dirichlet * w
-        taste = self.eligibile_phys_generator.dirichlet(alpha)  # patient taste over phys
+        taste = self.eligibile_phys_generator.dirichlet(
+            alpha
+        )  # patient taste over phys
         taste = taste + 1e-9 * np.random.standard_normal(self.P)  # tie-break noise
-    
+
         # Top-K eligible
         top_idx = np.argsort(taste)[-K:]
         E = {p: 0 for p in range(self.P)}  # NOTE: self.P (not self.PP)
         for p in top_idx:
             E[int(p)] = 1
-    
+
         # Safety: ensure ≥1 eligible (shouldn’t trigger, but guard anyway)
         if sum(E.values()) == 0:
             E[int(np.argmax(taste))] = 1
@@ -252,12 +261,12 @@ class AppointmentScheduler:
         Truncated lognormal service time (minutes), shorter for P1 on average.
         """
         if priority == 2:
-            mu, sigma = 2.3,  0.3 if self.var ==0 else 0.8 #0.3 0.8
+            mu, sigma = 2.3, 0.3 if self.var == 0 else 0.8  # 0.3 0.8
         else:
-            mu, sigma = 3,  0.8 if self.var ==0 else 1.2  #0.8, 1.2
+            mu, sigma = 3, 0.8 if self.var == 0 else 1.2  # 0.8, 1.2
         val = self.duration_generator.lognormal(mean=mu, sigma=sigma)
         return int(np.round(np.clip(val, 4, 60), 0))  # truncate to [4, 60]
-    
+
     def _sample_eligible_set(self) -> tuple[dict[int, int], np.ndarray]:
         """
         Unified eligibility sampler (no preferred input):
@@ -268,8 +277,8 @@ class AppointmentScheduler:
         mode = str(getattr(self, "eligibility_mode", "dirichlet_topk")).lower()
         if mode == "dirichlet_topk":
             return self._eligible_dirichlet_topk()
-    
-    def generate_patient(self, n: int, prio: int,  score_lower: float = 0.0) -> Patient:
+
+    def generate_patient(self, n: int, prio: int, score_lower: float = 0.0) -> Patient:
         """
         Generate a single patient:
           - priority in {1,2} with P(P1)=p1_fraction
@@ -280,9 +289,9 @@ class AppointmentScheduler:
           - attendance Y[p]: P2 shows on all; P1 shows on preferred, else Bernoulli(show_prob)
         """
         # Priority & duration
-        
+
         duration = self.sample_duration(prio)
-    
+
         # Arrival score (P1 skew late; P2 uniform)
         a, b = (3.0, 1.0) if prio == 1 else (1.0, 1.0)
 
@@ -301,25 +310,31 @@ class AppointmentScheduler:
                 else:
                     u = float(self.rank_generator.uniform(cdf_lower, 1.0 - 1e-12))
                     score = max(float(beta_dist.ppf(u, a, b)), score_lower)
-                
+
         # --- Eligible set first ---
-        E_map, weights = self._sample_eligible_set()  # weights is taste (Dirichlet) or global w
+        E_map, weights = (
+            self._sample_eligible_set()
+        )  # weights is taste (Dirichlet) or global w
         elig_idx = [p for p, e in E_map.items() if e == 1]
-    
+
         # choose preferred_phys from eligible (proportional to weights restricted to eligible)
         w_elig = np.asarray([weights[p] for p in elig_idx], dtype=float)
         w_elig = np.clip(w_elig, 1e-12, None)
         w_elig = w_elig / w_elig.sum()
         preferred_phys = int(self.phys_generator.choice(elig_idx, p=w_elig))
-    
+
         # --- Acceptability map A[p] ---
         A_map: dict[int, int] = {}
         for p in range(self.P):
             if E_map.get(p, 0) == 0:
                 A_map[p] = 0
             else:
-                A_map[p] = 1 if p == preferred_phys else int(self.rejection_generator.uniform() < self.accept_prob)
-    
+                A_map[p] = (
+                    1
+                    if p == preferred_phys
+                    else int(self.rejection_generator.uniform() < self.accept_prob)
+                )
+
         # --- Attendance Y[p] ---
         Y_map: dict[int, float] = {}
         if prio == 2:
@@ -331,18 +346,18 @@ class AppointmentScheduler:
                     Y_map[p] = 1
                 else:
                     Y_map[p] = int(self.show_generator.uniform() < self.show_prob)
-    
+
         return Patient(
             pid=f"pat_{n}",
             _id=n,
             duration=float(duration),
             preferred_phys=int(preferred_phys),
-            preferred_slot=-1,   # no-slot model
+            preferred_slot=-1,  # no-slot model
             priority=int(prio),
             A=A_map,
             Y=Y_map,
             score=score,
-            eligible=E_map,      # keep the eligibility snapshot if useful downstream
+            eligible=E_map,  # keep the eligibility snapshot if useful downstream
         )
 
     # ------------------------------------------------------------
@@ -358,13 +373,13 @@ class AppointmentScheduler:
     ):
         """
         Unified MIP builder over an explicit patient list.
-    
+
         Behavior
         --------
         - state is None  -> Full model over *all* `patients`.
         - state provided -> State-aware model over regenerated horizon,
                            **including the current patient** (all with _id >= current._id).
-    
+
         Returns
         -------
         model : ConcreteModel
@@ -380,7 +395,7 @@ class AppointmentScheduler:
               "baseline_work_per_phys": List[float],
               "nmap": {local_index -> global _id}
             }
-    
+
         -----------------------
         State fields read (when state is provided)
         -----------------------
@@ -396,23 +411,28 @@ class AppointmentScheduler:
             mode = "full"
             future = list(patients)  # use exactly what was passed
             t_val = None
-    
+
             # Baseline vectors for unified rules
             base_work = [0.0] * self.P
             # Capacity: use original per-phys cap or disable if None
-            cap_limit = [self.cap_per_phys] * self.P if self.cap_per_phys is not None else None
+            cap_limit = (
+                [self.cap_per_phys] * self.P if self.cap_per_phys is not None else None
+            )
             # Release: use original Rmax or disable if None
             release_limit = int(self.Rmax) if self.Rmax is not None else None
-    
+
         else:
             mode = "state"
             t_val = int(state["t"])
             # Baselines
             base_work = list(state.get("work_per_phys", [0.0] * self.P))
-                
+
             used_cap = list(state.get("assigned_per_phys", [0] * self.P))
             if len(base_work) != self.P or len(used_cap) != self.P:
-                raise ValueError("state.work_per_phys / state.assigned_per_phys must be length P.", base_work)
+                raise ValueError(
+                    "state.work_per_phys / state.assigned_per_phys must be length P.",
+                    base_work,
+                )
 
             future = sorted(patients, key=lambda q: int(q._id))
 
@@ -421,7 +441,7 @@ class AppointmentScheduler:
                 cap_limit = [max(0, int(self.cap_per_phys) - int(c)) for c in used_cap]
             else:
                 cap_limit = None
-    
+
             # Release limit = remaining release
             if self.Rmax is not None:
                 rr = state.get("remaining_release")
@@ -430,8 +450,7 @@ class AppointmentScheduler:
                 release_limit = int(rr)
             else:
                 release_limit = None
-    
-    
+
         # ---------- Build common model (no duplicated rules) ----------
         m = ConcreteModel()
         F = list(range(len(future)))
@@ -442,63 +461,75 @@ class AppointmentScheduler:
         m.x = Var(F, Pset, domain=Binary)
         m.u = Var(F, domain=Binary)
         m.B_over = Var(Pset, domain=NonNegativeReals)
-    
+
         # (1) assign or reject
         def _assign_or_reject(m, f):
             return sum(m.x[f, p] for p in Pset) + m.u[f] == 1
+
         m.AssignOrReject = Constraint(F, rule=_assign_or_reject)
-    
+
         # (2) acceptability
         def _accept(m, f, p):
             acc = int(future[f].A.get(p, 0))
             elig = int(getattr(future[f], "eligible", {}).get(p, 0))
             return m.x[f, p] <= acc * elig
+
         m.Acceptability = Constraint(F, Pset, rule=_accept)
-        
 
         def _overtime_cap(m, p):
             return m.B_over[p] <= self.MAX_OVERTIME
+
         m.OvertimeCap = Constraint(Pset, rule=_overtime_cap)
 
         # (3) capacity (unified)
         if cap_limit is not None:
+
             def _cap(m, p):
                 return sum(m.x[f, p] for f in F) <= int(cap_limit[p])
+
             m.Capacity = Constraint(Pset, rule=_cap)
-            
-        #if self.c_o > 0:
-            # (4) overtime (unified)
+
+        # if self.c_o > 0:
+        # (4) overtime (unified)
         def _overtime(m, p):
             future_work = sum(
                 float(future[f].duration) * float(future[f].Y.get(p, 1.0)) * m.x[f, p]
                 for f in F
             )
-            return m.B_over[p] >= (float(base_work[p]) + future_work) - float(self.session_time)
+            return m.B_over[p] >= (float(base_work[p]) + future_work) - float(
+                self.session_time
+            )
+
         m.Overtime = Constraint(Pset, rule=_overtime)
         overtime_pen = self.c_o * sum(m.B_over[p] for p in Pset)
-        #else:
+        # else:
         #    overtime_pen = 0
-    
+
         # (5) release (unified)
         if release_limit is not None:
+
             def _release(m):
                 return sum(1 - m.u[f] for f in F) <= int(release_limit)
+
             m.ReleaseCap = Constraint(rule=_release)
-    
+
         # Objective (same for both modes)
         def _rej_cost(f):
             return self.c_miss_1 if int(future[f].priority) == 1 else self.c_miss_2
-    
-        pref = {f: int(future[f].preferred_phys) for f in F}
-        def _nonpref_pen(f, p):
-            return (self.c_nonpref_1 if int(future[f].priority) == 1 else self.c_nonpref_2) * (1 if p != pref[f] else 0)
-    
-        reject_pen  = sum(_rej_cost(f) * m.u[f] for f in F)
 
-        nonpref_pen  = sum(_nonpref_pen(f, p) * m.x[f, p] for f in F for p in Pset)
-    
+        pref = {f: int(future[f].preferred_phys) for f in F}
+
+        def _nonpref_pen(f, p):
+            return (
+                self.c_nonpref_1 if int(future[f].priority) == 1 else self.c_nonpref_2
+            ) * (1 if p != pref[f] else 0)
+
+        reject_pen = sum(_rej_cost(f) * m.u[f] for f in F)
+
+        nonpref_pen = sum(_nonpref_pen(f, p) * m.x[f, p] for f in F for p in Pset)
+
         m.Obj = Objective(expr=reject_pen + overtime_pen + nonpref_pen, sense=minimize)
-    
+
         self.model = m
         info = {
             "mode": mode,
@@ -511,7 +542,7 @@ class AppointmentScheduler:
             "nmap": nmap,
         }
         return info
-    
+
     # ------------------------------------------------------------
     # Solve utilities
     # ------------------------------------------------------------
@@ -524,19 +555,19 @@ class AppointmentScheduler:
             raise RuntimeError(f"Solver {name} not available")
         self.solver.options["TimeLimit"] = self.time_limit
         self.solver.options["Threads"] = 2
-        self.solver.options["MIPGap"] = self.mipgap 
+        self.solver.options["MIPGap"] = self.mipgap
 
     def solve(self, tee: bool = False):
         """Return (status, termination_condition, mip_gap_pct, wall_time_sec)."""
         assert self.model is not None
-        #start = time.time()
+        # start = time.time()
         res = self.solver.solve(self.model, tee=tee)
 
-        #duration = time.time() - start
-        #print(res.solver.__dict__)
-        duration = res.solver._list[0]['Wall time']
-        #duration = res.solver._list[0]['Time']
-        
+        # duration = time.time() - start
+        # print(res.solver.__dict__)
+        duration = res.solver._list[0]["Wall time"]
+        # duration = res.solver._list[0]['Time']
+
         status = str(res.solver.status)
         term = str(res.solver.termination_condition)
         # Try to compute MIP gap
@@ -574,8 +605,8 @@ class AppointmentScheduler:
                 "reject_pen": 0.0,
                 "overtime_pen": 0.0,
                 "nonpref_pen": 0.0,
-                "objective": 0.0
-            }
+                "objective": 0.0,
+            },
         }
 
         for n in Nset:
@@ -584,19 +615,20 @@ class AppointmentScheduler:
 
             if not chosen and value(m.u[n]) > 0.5:
                 pen = float(self.c_miss_1 if pat.priority == 1 else self.c_miss_2)
-                sol["rejected"].append({
-                    "kind": "reject",
-                    "pid": getattr(pat, "pid", f"pat_{n}"),
-                    "n": n,
-                    "p": -1,
-                    "priority": int(pat.priority),
-                    "score": pat.score,
-                    "duration": float(pat.duration),
-                    "preferred_phys": pat.preferred_phys,
-                    "eligible": list(pat.eligible.values()),
-                    "penalty": pen
-                    
-                })
+                sol["rejected"].append(
+                    {
+                        "kind": "reject",
+                        "pid": getattr(pat, "pid", f"pat_{n}"),
+                        "n": n,
+                        "p": -1,
+                        "priority": int(pat.priority),
+                        "score": pat.score,
+                        "duration": float(pat.duration),
+                        "preferred_phys": pat.preferred_phys,
+                        "eligible": list(pat.eligible.values()),
+                        "penalty": pen,
+                    }
+                )
                 sol["totals"]["reject_pen"] += pen
 
             for p in chosen:
@@ -608,21 +640,23 @@ class AppointmentScheduler:
 
                 work_min = float(pat.duration) * Y_np
 
-                sol["assignments"].append({
-                    "kind": "assign",
-                    "pid": getattr(pat, "pid", f"pat_{n}"),
-                    "n": n,
-                    "p": p,
-                    "priority": int(pat.priority),
-                    "score": pat.score,
-                    "duration": float(pat.duration),
-                    "preferred_phys": pat.preferred_phys,
-                    "eligible": list(pat.eligible.values()),
-                    "nonpref_flag": nonpref,
-                    "nonpref_cost": float(nonpref_cost),
-                    "Y_np": Y_np,
-                    "work_minutes": work_min
-                })
+                sol["assignments"].append(
+                    {
+                        "kind": "assign",
+                        "pid": getattr(pat, "pid", f"pat_{n}"),
+                        "n": n,
+                        "p": p,
+                        "priority": int(pat.priority),
+                        "score": pat.score,
+                        "duration": float(pat.duration),
+                        "preferred_phys": pat.preferred_phys,
+                        "eligible": list(pat.eligible.values()),
+                        "nonpref_flag": nonpref,
+                        "nonpref_cost": float(nonpref_cost),
+                        "Y_np": Y_np,
+                        "work_minutes": work_min,
+                    }
+                )
                 sol["totals"]["nonpref_pen"] += float(nonpref_cost)
 
         # overtime
@@ -638,13 +672,13 @@ class AppointmentScheduler:
         sol["totals"]["objective"] = obj
 
         return sol, obj
-    
+
     def get_current_action(self, i):
         if self.model.u[i].value > 0.5:
             action = self.P
         else:
             for p in range(self.P):
-                if self.model.x[i,p].value > 0.5:
+                if self.model.x[i, p].value > 0.5:
                     action = p
                     break
         return action
@@ -667,60 +701,82 @@ class AppointmentScheduler:
         """
         out_dir = self.out_dir if not folder else os.path.join(self.out_dir, folder)
         os.makedirs(out_dir, exist_ok=True)
-    
+
         # ---------- CSV (chronological by patient n) ----------
         csv_path = os.path.join(out_dir, f"{tag}_schedule.csv")
         with open(csv_path, "w", newline="") as f:
             w = csv.writer(f)
             # added cumulative columns
-            w.writerow([
-                "kind", "pid", "n", "p", "priority", "score", "preferred_phys", "eligible",
-                "duration", "Y_np", "work_minutes", "penalty", "B_over", "row_cost",
-                "cum_accept_total", "cum_accept_p1", "cum_accept_p2",
-                "cum_reject_total", "cum_reject_p1", "cum_reject_p2"
-            ])
-    
+            w.writerow(
+                [
+                    "kind",
+                    "pid",
+                    "n",
+                    "p",
+                    "priority",
+                    "score",
+                    "preferred_phys",
+                    "eligible",
+                    "duration",
+                    "Y_np",
+                    "work_minutes",
+                    "penalty",
+                    "B_over",
+                    "row_cost",
+                    "cum_accept_total",
+                    "cum_accept_p1",
+                    "cum_accept_p2",
+                    "cum_reject_total",
+                    "cum_reject_p1",
+                    "cum_reject_p2",
+                ]
+            )
+
             # build chronological stream of patient events
             events = []
             for rec in sol.get("assignments", []):
-                events.append({
-                    "kind": "assign",
-                    "pid": rec.get("pid", ""),
-                    "n": int(rec["n"]),
-                    "p": int(rec["p"]),
-                    "priority": int(rec["priority"]),
-                    "score": rec["score"],
-                    "preferred_phys": int(rec.get("preferred_phys", -1)),
-                    "eligible": rec.get("eligible", ""),
-                    "duration": float(rec.get("duration", 0.0)),
-                    "Y_np": float(rec.get("Y_np", 0.0)),
-                    "work_minutes": float(rec.get("work_minutes", 0.0)),
-                    "penalty": 0.0,
-                    "B_over": 0.0,
-                    "row_cost": 0.0
-                })
+                events.append(
+                    {
+                        "kind": "assign",
+                        "pid": rec.get("pid", ""),
+                        "n": int(rec["n"]),
+                        "p": int(rec["p"]),
+                        "priority": int(rec["priority"]),
+                        "score": rec["score"],
+                        "preferred_phys": int(rec.get("preferred_phys", -1)),
+                        "eligible": rec.get("eligible", ""),
+                        "duration": float(rec.get("duration", 0.0)),
+                        "Y_np": float(rec.get("Y_np", 0.0)),
+                        "work_minutes": float(rec.get("work_minutes", 0.0)),
+                        "penalty": 0.0,
+                        "B_over": 0.0,
+                        "row_cost": 0.0,
+                    }
+                )
             for rec in sol.get("rejected", []):
                 pen = float(rec.get("penalty", 0.0))
-                events.append({
-                    "kind": "reject",
-                    "pid": rec.get("pid", ""),
-                    "n": int(rec["n"]),
-                    "p": -1,
-                    "priority": int(rec["priority"]),
-                    "score": rec["score"],
-                    "preferred_phys": int(rec.get("preferred_phys", -1)),
-                    "eligible": rec.get("eligible", ""),
-                    "duration": float(rec.get("duration", 0.0)),
-                    "Y_np": 0.0,
-                    "work_minutes": 0.0,
-                    "penalty": pen,
-                    "B_over": 0.0,
-                    "row_cost": pen
-                })
-    
+                events.append(
+                    {
+                        "kind": "reject",
+                        "pid": rec.get("pid", ""),
+                        "n": int(rec["n"]),
+                        "p": -1,
+                        "priority": int(rec["priority"]),
+                        "score": rec["score"],
+                        "preferred_phys": int(rec.get("preferred_phys", -1)),
+                        "eligible": rec.get("eligible", ""),
+                        "duration": float(rec.get("duration", 0.0)),
+                        "Y_np": 0.0,
+                        "work_minutes": 0.0,
+                        "penalty": pen,
+                        "B_over": 0.0,
+                        "row_cost": pen,
+                    }
+                )
+
             kind_order = {"assign": 0, "reject": 1}
             events.sort(key=lambda r: (r["n"], kind_order.get(r["kind"], 99)))
-    
+
             # running cumulative counters (accepted only)
             cum_total = 0
             cum_p1 = 0
@@ -728,7 +784,7 @@ class AppointmentScheduler:
             cum_reject = 0
             cum_reject_p1 = 0
             cum_reject_p2 = 0
-    
+
             for ev in events:
                 if ev["kind"] == "assign":
                     cum_total += 1
@@ -736,36 +792,73 @@ class AppointmentScheduler:
                         cum_p1 += 1
                     elif ev["priority"] == 2:
                         cum_p2 += 1
-                elif  ev["kind"] == "reject":
+                elif ev["kind"] == "reject":
                     cum_reject += 1
                     if ev["priority"] == 1:
                         cum_reject_p1 += 1
                     elif ev["priority"] == 2:
                         cum_reject_p2 += 1
-    
-                w.writerow([
-                    ev["kind"], ev["pid"], ev["n"], ev["p"], ev["priority"],ev["score"], ev["preferred_phys"],
-                    ev["eligible"], ev["duration"], ev["Y_np"], ev["work_minutes"], ev["penalty"],
-                    ev["B_over"], ev["row_cost"],
-                    cum_total, cum_p1, cum_p2, cum_reject, cum_reject_p1, cum_reject_p2
-                ])
-    
+
+                w.writerow(
+                    [
+                        ev["kind"],
+                        ev["pid"],
+                        ev["n"],
+                        ev["p"],
+                        ev["priority"],
+                        ev["score"],
+                        ev["preferred_phys"],
+                        ev["eligible"],
+                        ev["duration"],
+                        ev["Y_np"],
+                        ev["work_minutes"],
+                        ev["penalty"],
+                        ev["B_over"],
+                        ev["row_cost"],
+                        cum_total,
+                        cum_p1,
+                        cum_p2,
+                        cum_reject,
+                        cum_reject_p1,
+                        cum_reject_p2,
+                    ]
+                )
+
             # overtime rows (do not affect cumulative accepted)
             for o in sol.get("overtime", []):
-                p = int(o["p"]); b = float(o.get("B_over", 0.0))
-                w.writerow([
-                    "overtime", "", -1, p, -1, -1, -1,[],
-                    0.0, 0.0, 0.0, 0.0,
-                    b, float(self.c_o) * b,
-                    cum_total, cum_p1, cum_p2, cum_reject, cum_reject_p1, cum_reject_p2
-                ])
-    
+                p = int(o["p"])
+                b = float(o.get("B_over", 0.0))
+                w.writerow(
+                    [
+                        "overtime",
+                        "",
+                        -1,
+                        p,
+                        -1,
+                        -1,
+                        -1,
+                        [],
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        b,
+                        float(self.c_o) * b,
+                        cum_total,
+                        cum_p1,
+                        cum_p2,
+                        cum_reject,
+                        cum_reject_p1,
+                        cum_reject_p2,
+                    ]
+                )
+
         # ---------- JSON meta / totals (unchanged except nonpref included) ----------
-        reject_pen_total   = float(sol["totals"].get("reject_pen", 0.0))
+        reject_pen_total = float(sol["totals"].get("reject_pen", 0.0))
         overtime_pen_total = float(sol["totals"].get("overtime_pen", 0.0))
-        nonpref_pen_total  = float(sol["totals"].get("nonpref_pen", 0.0))
-        objective_total    = float(sol["totals"].get("objective", obj))
-    
+        nonpref_pen_total = float(sol["totals"].get("nonpref_pen", 0.0))
+        objective_total = float(sol["totals"].get("objective", obj))
+
         meta = {
             "objective": obj,
             "status": status,
@@ -778,7 +871,9 @@ class AppointmentScheduler:
                 "overtime_pen_total": overtime_pen_total,
                 "nonpref_pen_total": nonpref_pen_total,
                 "objective_total": objective_total,
-                "objective_check": reject_pen_total + overtime_pen_total + nonpref_pen_total
+                "objective_check": reject_pen_total
+                + overtime_pen_total
+                + nonpref_pen_total,
             },
             "params": {
                 "N1": self.N1,
@@ -795,11 +890,10 @@ class AppointmentScheduler:
                 "cap_per_phys": self.cap_per_phys,
             },
         }
-    
+
         json_path = os.path.join(out_dir, f"{tag}_solution.json")
         with open(json_path, "w") as f:
             json.dump({"meta": meta, "solution": sol}, f, indent=2)
-    
 
     def save_instance_csv(
         self,
@@ -812,7 +906,7 @@ class AppointmentScheduler:
         Persist a patient cohort (any list) to CSV:
           - '{tag}_patients.csv': pid, n(_id), priority, duration, preferred_phys, preferred_slot, arrival_score
           - '{tag}_AY.csv'     : (n, p, A_np, Y_np) per physician
-    
+
         Args
         ----
         tag : str
@@ -823,7 +917,7 @@ class AppointmentScheduler:
             Subfolder under self.out_dir. Use "" to write directly to self.out_dir.
         sort_by_id : bool
             If True, rows are ordered by patient._id.
-    
+
         Returns
         -------
         dict with paths: {"patients_csv": <path>, "ay_csv": <path>}
@@ -831,42 +925,53 @@ class AppointmentScheduler:
         # Resolve target dir
         out_dir = self.out_dir if not folder else os.path.join(self.out_dir, folder)
         os.makedirs(out_dir, exist_ok=True)
-    
+
         # Order cohort (arrival order by _id)
         cohort = list(patients)
         if sort_by_id:
             cohort.sort(key=lambda q: int(getattr(q, "_id", 0)))
-    
+
         # ---------- Patients ----------
         patients_path = os.path.join(out_dir, f"{tag}_patients.csv")
         with open(patients_path, "w", newline="") as f:
             w = csv.writer(f)
-            w.writerow([
-                "pid", "n", "priority", "duration",
-                "preferred_phys", "preferred_slot", "arrival_score"
-            ])
+            w.writerow(
+                [
+                    "pid",
+                    "n",
+                    "priority",
+                    "duration",
+                    "preferred_phys",
+                    "preferred_slot",
+                    "arrival_score",
+                ]
+            )
             for p in cohort:
-                w.writerow([
-                    getattr(p, "pid", f"pat_{getattr(p, '_id', 0)}"),
-                    int(getattr(p, "_id", 0)),
-                    int(getattr(p, "priority", 2)),
-                    float(getattr(p, "duration", 0.0)),
-                    int(getattr(p, "preferred_phys", 0)),
-                    int(getattr(p, "preferred_slot", -1)),
-                    float(getattr(p, "score", getattr(p, "arrival_score", 0.0))),
-                ])
-    
+                w.writerow(
+                    [
+                        getattr(p, "pid", f"pat_{getattr(p, '_id', 0)}"),
+                        int(getattr(p, "_id", 0)),
+                        int(getattr(p, "priority", 2)),
+                        float(getattr(p, "duration", 0.0)),
+                        int(getattr(p, "preferred_phys", 0)),
+                        int(getattr(p, "preferred_slot", -1)),
+                        float(getattr(p, "score", getattr(p, "arrival_score", 0.0))),
+                    ]
+                )
+
         # ---------- A and Y per (n,p) ----------
         ay_path = os.path.join(out_dir, f"{tag}_AYE.csv")
         with open(ay_path, "w", newline="") as f:
             w = csv.writer(f)
             w.writerow(["n", "p", "A_np", "Y_np", "E_np"])
-    
+
             # Detect if any patient in cohort uses legacy slot-level A[(p,i)]
             def has_slot_A(pat) -> bool:
                 A = getattr(pat, "A", None)
-                return isinstance(A, dict) and any(isinstance(k, tuple) and len(k) == 2 for k in A.keys())
-    
+                return isinstance(A, dict) and any(
+                    isinstance(k, tuple) and len(k) == 2 for k in A.keys()
+                )
+
             any_slot = any(has_slot_A(p) for p in cohort)
             for p in cohort:
                 n = int(getattr(p, "_id", 0))
@@ -874,7 +979,7 @@ class AppointmentScheduler:
                 A_dict = getattr(p, "A", {}) or {}
                 Y_dict = getattr(p, "Y", {}) or {}
                 E_dict = getattr(p, "eligible", {}) or {}
-    
+
                 for phys in range(self.P):
                     # A_np: collapse slot-level if needed, else read physician-level
                     if any_slot and has_slot_A(p):
@@ -883,7 +988,7 @@ class AppointmentScheduler:
                             a_np = max(a_np, int(A_dict.get((phys, i), 0)))
                     else:
                         a_np = int(A_dict.get(phys, 0))
-    
+
                     # Y_np: prefer stored Y; else fallback to rule
                     if phys in Y_dict:
                         y_np = float(Y_dict[phys])
@@ -893,23 +998,25 @@ class AppointmentScheduler:
                             y_np = 1.0
                         else:
                             y_np = 1.0 if (phys == pref_p) else float(self.show_prob)
-                    e_np = int(E_dict.get(phys, 0))   
-    
+                    e_np = int(E_dict.get(phys, 0))
+
                     w.writerow([n, phys, int(a_np), int(y_np), int(e_np)])
-    
+
     # ------------------------------------------------------------
     # End-to-end run
     # ------------------------------------------------------------
 
-     # ============================
+    # ============================
     # Simulation (step-based API)
     # ============================
 
-    def init_sim(self,
-                 enforce_cap_per_phys: bool = True,
-                 respect_release_cap: bool = True,
-                 reject_on_infeasible: bool = True,
-                 reward_scale: float = 1.0):
+    def init_sim(
+        self,
+        enforce_cap_per_phys: bool = True,
+        respect_release_cap: bool = True,
+        reject_on_infeasible: bool = True,
+        reward_scale: float = 1.0,
+    ):
         """
         Configure the built-in simulator.
         - enforce_cap_per_phys: respect self.cap_per_phys if not None
@@ -924,9 +1031,9 @@ class AppointmentScheduler:
             reward_scale=float(reward_scale),
         )
         return self._sim_cfg
-    
+
     # --- add these two small helpers inside your class ---
-    
+
     def _sim_no_capacity_left(self) -> bool:
         """Return True iff per-phys caps are enforced and every physician is at capacity."""
         if not self._sim_cfg.get("enforce_cap_per_phys", False):
@@ -934,8 +1041,10 @@ class AppointmentScheduler:
         if self.cap_per_phys is None:
             return False
         # all physicians have assigned >= cap
-        return all(int(c) >= int(self.cap_per_phys) for c in self._sim_assigned_per_phys)
-    
+        return all(
+            int(c) >= int(self.cap_per_phys) for c in self._sim_assigned_per_phys
+        )
+
     def _sim_terminal_forced_reject_reward(self) -> float:
         """
         Sum the rejection penalties for all remaining patients (from current index self._sim_t to N-1).
@@ -944,9 +1053,8 @@ class AppointmentScheduler:
         pen = 0.0
         for idx in range(self._sim_t, self.N_total):
             prio = int(getattr(self.patients[idx], "priority", 2))
-            pen += (self.c_miss_1 if prio == 1 else self.c_miss_2)
+            pen += self.c_miss_1 if prio == 1 else self.c_miss_2
         return -pen
-
 
     def reset_simulator(self):
         """
@@ -957,161 +1065,182 @@ class AppointmentScheduler:
             raise ValueError("Call generate_instance() before reset_sim().")
 
         self._sim_t = 0  # current patient index
-        self._sim_patient_arrived=0
+        self._sim_patient_arrived = 0
         self._sim_done = False
         self._sim_assigned_per_phys = [0] * self.P
         self._sim_work_per_phys = [0.0] * self.P  # sum of duration * Y[n,p]
         self._sim_accepted_count = 0
-        self._sim_accepted_priority_phy = {i :{1:0, 2:0} for i in range(self.P)}
-        self._sim_patient_count = {1:0, 2:0}
+        self._sim_accepted_priority_phy = {i: {1: 0, 2: 0} for i in range(self.P)}
+        self._sim_patient_count = {1: 0, 2: 0}
 
         # default config if not set
         if not hasattr(self, "_sim_cfg"):
             self.init_sim()
 
         # early-terminate if release cap is 0
-        if self._sim_cfg["respect_release_cap"] and (self.Rmax is not None) and (self.Rmax <= 0):
+        if (
+            self._sim_cfg["respect_release_cap"]
+            and (self.Rmax is not None)
+            and (self.Rmax <= 0)
+        ):
             self._sim_done = True
 
         return self._sim_state(), self._sim_done
-    
+
     def step(self, action: int):
         """
         One step in the simulator.
-    
+
         Action space:
             0..P-1  => assign current patient to physician p
             P       => reject current patient
-    
+
         Returns:
             (next_state, reward, done)
-    
+
         Notes:
             - Rewards are NEGATIVE penalties (higher is better).
             - Overtime penalty is applied ONLY once, at the terminal step.
         """
         cfg = self._sim_cfg  # simulation configuration flags (set by init_sim)
-    
+
         # If the episode is already finished, return a no-op transition.
         if self._sim_done:
             return self._sim_state(), 0.0 * cfg["reward_scale"], True
-    
+
         # --- Early termination: global release cap exhausted BEFORE consuming the next patient ---
         # If a release cap is enforced and we've already accepted Rmax patients, end now.
-        if cfg["respect_release_cap"] and (self.Rmax is not None) and (self._sim_accepted_count >= self.Rmax):
+        if (
+            cfg["respect_release_cap"]
+            and (self.Rmax is not None)
+            and (self._sim_accepted_count >= self.Rmax)
+        ):
             self._sim_done = True
-            term_reward = self._sim_terminal_overtime_reward() + self._sim_terminal_forced_reject_reward()  # add terminal overtime once
+            term_reward = (
+                self._sim_terminal_overtime_reward()
+                + self._sim_terminal_forced_reject_reward()
+            )  # add terminal overtime once
             return self._sim_state(), term_reward * cfg["reward_scale"], True
-        
-        if self._sim_no_capacity_left():
-          self._sim_done = True
-          term_reward = self._sim_terminal_overtime_reward() + self._sim_terminal_forced_reject_reward()
-          return self._sim_state(), term_reward * cfg["reward_scale"], True
 
-    
+        if self._sim_no_capacity_left():
+            self._sim_done = True
+            term_reward = (
+                self._sim_terminal_overtime_reward()
+                + self._sim_terminal_forced_reject_reward()
+            )
+            return self._sim_state(), term_reward * cfg["reward_scale"], True
+
         # --- Early termination: no more patients to process ---
         if self._sim_t >= self.N_total:
             self._sim_done = True
-            term_reward = self._sim_terminal_overtime_reward() 
+            term_reward = self._sim_terminal_overtime_reward()
             return self._sim_state(), term_reward * cfg["reward_scale"], True
-    
+
         # Fetch the current patient (indexed by arrival order _sim_t)
         pat = self.patients[self._sim_t]
-    
+
         # Interpret the action:
         #  - if action == P      -> reject
         #  - else (0..P-1)       -> assign to physician p_sel
-        is_reject = (action == self.P)
+        is_reject = action == self.P
         p_sel = None if is_reject else int(action)
-    
+
         # --- Check feasibility WHEN attempting an assignment ---
         feasible = True
         if not is_reject:
             # Eligibility must be 1
             if int(getattr(pat, "eligible", {}).get(p_sel, 0)) == 0:
                 feasible = False
-        
+
             # Acceptability must be 1
             if feasible and pat.A.get(p_sel, 0) == 0:
                 feasible = False
-        
+
             # Capacity limit (existing)
-            if feasible and cfg["enforce_cap_per_phys"] and (self.cap_per_phys is not None):
+            if (
+                feasible
+                and cfg["enforce_cap_per_phys"]
+                and (self.cap_per_phys is not None)
+            ):
                 if self._sim_assigned_per_phys[p_sel] >= self.cap_per_phys:
                     feasible = False
-                    
+
             if feasible and (getattr(self, "session_time", None) is not None):
                 # minutes that would be added by assigning this patient to p_sel
                 y_np = float(pat.Y.get(p_sel, 1.0))
                 add_work = float(pat.duration) * y_np
-    
+
                 # current accumulated future work for this physician
                 cur_work = float(self._sim_work_per_phys[p_sel])
-    
+
                 # projected overtime after this assignment
                 sess = float(self.session_time)
                 projected_overtime = max(0.0, (cur_work + add_work) - sess)
-    
+
                 if projected_overtime > self.MAX_OVERTIME:
                     feasible = False
-    
-        
+
         # Initialize per-step reward (we accumulate negative penalties)
         reward = 0.0
-    
+
         # --- Apply the action outcome ---
         if is_reject or (not feasible and cfg["reject_on_infeasible"]):
             # Case 1: Explicit reject OR infeasible assignment auto-converted to reject
             rej_cost = self.c_miss_1 if pat.priority == 1 else self.c_miss_2
             reward -= rej_cost  # penalties are negative rewards
-            self._sim_t += 1    # move to the next patient
-            
-    
+            self._sim_t += 1  # move to the next patient
+
         elif not feasible and not cfg["reject_on_infeasible"]:
             # Case 2: Infeasible assignment but we choose NOT to convert to reject.
             # This is a "no-op" step by default; you could add a small shaping penalty if desired.
             reward += 0.0
-    
+
         else:
             # Case 3: Valid assignment to physician p_sel
             # Penalize non-preferred assignment (priority-dependent)
             nonpref = int(p_sel != pat.preferred_phys)
-            nonpref_cost = (self.c_nonpref_1 if pat.priority == 1 else self.c_nonpref_2) * nonpref
+            nonpref_cost = (
+                self.c_nonpref_1 if pat.priority == 1 else self.c_nonpref_2
+            ) * nonpref
             reward -= nonpref_cost
-    
+
             # Add realized workload to that physician:
             #  - duration (minutes) times attendance indicator Y[p_sel]
             y_np = float(pat.Y.get(p_sel, 1.0))
             self._sim_work_per_phys[p_sel] += float(pat.duration) * y_np
-    
+
             # Update counters: physician assignment count and global accepted count
             self._sim_assigned_per_phys[p_sel] += 1
             self._sim_accepted_count += 1
             self._sim_accepted_priority_phy[p_sel][pat.priority] += 1
-    
+
             # Advance to the next patient
             self._sim_t += 1
-        
+
         # --- Check terminal conditions AFTER consuming this step ---
         # End the episode if:
         #   - we processed the last patient, OR
         #   - the release cap (if enforced) has just been reached.
         done_now = False
-        if (self._sim_t >= self.N_total):
+        if self._sim_t >= self.N_total:
             done_now = True
-        if cfg["respect_release_cap"] and (self.Rmax is not None) and (self._sim_accepted_count >= self.Rmax):
+        if (
+            cfg["respect_release_cap"]
+            and (self.Rmax is not None)
+            and (self._sim_accepted_count >= self.Rmax)
+        ):
             done_now = True
         if self._sim_no_capacity_left():
             done_now = True
-    
+
         if done_now:
             self._sim_done = True
             # Overtime + forced rejections for any *remaining* patients (if any)
             reward += self._sim_terminal_overtime_reward()
             reward += self._sim_terminal_forced_reject_reward()
-    
+
         return self._sim_state(), reward * cfg["reward_scale"], feasible, self._sim_done
-    
+
     def simulate_policy(self, policy_fn):
         """
         Convenience runner: simulate a full episode using policy_fn(state)->action.
@@ -1137,7 +1266,7 @@ class AppointmentScheduler:
             "feasibles": feasibles,
             "total_reward": float(sum(rewards)),
             "overtime_minutes_per_phys": self._sim_overtime_vector(),
-            "overtime_penalty": -self._sim_terminal_overtime_reward()  # positive cost
+            "overtime_penalty": -self._sim_terminal_overtime_reward(),  # positive cost
         }
 
     # -----------------------
@@ -1152,7 +1281,6 @@ class AppointmentScheduler:
         over = self._sim_overtime_vector()
         return -self.c_o * float(sum(over))
 
-
     def _sim_state(self):
         """
         Build current state dict:
@@ -1165,22 +1293,28 @@ class AppointmentScheduler:
         """
         # --- capacity remaining per physician (if enforced) ---
         cap_remaining = None
-        if self._sim_cfg.get("enforce_cap_per_phys", False) and (self.cap_per_phys is not None):
-            cap_remaining = [max(0, int(self.cap_per_phys) - int(c)) for c in self._sim_assigned_per_phys]
-    
+        if self._sim_cfg.get("enforce_cap_per_phys", False) and (
+            self.cap_per_phys is not None
+        ):
+            cap_remaining = [
+                max(0, int(self.cap_per_phys) - int(c))
+                for c in self._sim_assigned_per_phys
+            ]
+
         # --- global remaining release (if enforced) ---
         remaining_release = None
         if self._sim_cfg.get("respect_release_cap", False) and (self.Rmax is not None):
             remaining_release = max(0, int(self.Rmax) - int(self._sim_accepted_count))
-    
+
         # --- current patient payload ---
         if self._sim_t >= self.N_total:
             cur = None
         else:
             pat = self.patients[self._sim_t]
-            session = float(self.session_time) if self.session_time is not None else None
+            session = (
+                float(self.session_time) if self.session_time is not None else None
+            )
 
-    
             # Capacity-based availability vector:
             #  - if caps enforced: 1 iff that physician still has remaining capacity
             #  - if caps not enforced: all physicians are available (all ones)
@@ -1192,7 +1326,7 @@ class AppointmentScheduler:
             # Overtime-feasibility for assigning THIS patient to each physician
             # proj_OT_p = max(0, base_work_p + cur_work_p + pat.duration * Y[p] - session_time)
             ot_ok = [True] * self.P
-            if  (session is not None) and session > 0:
+            if (session is not None) and session > 0:
                 # baseline work if you track it; else default to 0
                 base_work = getattr(self, "_sim_base_work_per_phys", [0.0] * self.P)
                 cur_work = self._sim_work_per_phys
@@ -1202,13 +1336,20 @@ class AppointmentScheduler:
                     y_np = float(Y.get(p, 1.0))
                     projected_overtime = max(
                         0.0,
-                        float(base_work[p]) + float(cur_work[p]) + cur_dur * y_np - session
+                        float(base_work[p])
+                        + float(cur_work[p])
+                        + cur_dur * y_np
+                        - session,
                     )
                     if projected_overtime > self.MAX_OVERTIME:
                         ot_ok[p] = False
 
-            available_phys = [1 if (cap_ok[p] and ot_ok[p]) else 0 for p in range(self.P)]
-            eligible_phys = [int(getattr(pat, "eligible", {}).get(p, 0)) for p in range(self.P)]
+            available_phys = [
+                1 if (cap_ok[p] and ot_ok[p]) else 0 for p in range(self.P)
+            ]
+            eligible_phys = [
+                int(getattr(pat, "eligible", {}).get(p, 0)) for p in range(self.P)
+            ]
             cur = {
                 "n": self._sim_t,
                 "pid": getattr(pat, "pid", f"pat_{self._sim_t}"),
@@ -1216,12 +1357,11 @@ class AppointmentScheduler:
                 "score": pat.score,
                 "duration": pat.duration,
                 "preferred_phys": int(pat.preferred_phys),
-                "available_phys": available_phys,   # capacity availability
-                "eligible_phys": eligible_phys,     # NEW eligibility mask
+                "available_phys": available_phys,  # capacity availability
+                "eligible_phys": eligible_phys,  # NEW eligibility mask
             }
             self._sim_patient_count[int(pat.priority)] += 1
-            
-    
+
         return {
             "t": self._sim_t,
             "N1": self.N1,
@@ -1231,54 +1371,62 @@ class AppointmentScheduler:
             "Rmax": self.Rmax,
             "session_time": self.session_time,
             "patients_arrived": self._sim_t + 1,
-            "patient_count":self._sim_patient_count,
+            "patient_count": self._sim_patient_count,
             "current_patient": cur,
             "work_per_phys": list(self._sim_work_per_phys),
             "assigned_per_phys": list(self._sim_assigned_per_phys),
-            "cap_remaining": cap_remaining,          # None if caps not enforced
+            "cap_remaining": cap_remaining,  # None if caps not enforced
             "accepted_count": self._sim_accepted_count,
             "accepted_priority_phy": self._sim_accepted_priority_phy,
             "remaining_release": remaining_release,  # None if release cap not enforced
             "done": self._sim_done,
         }
-    
+
     def collect_stats(
         self,
         states: List[Dict],
         actions: List[int],
         rewards: List[float],
-        feasibles: List[bool]
-    ) :
+        feasibles: List[bool],
+    ):
         """
         Return a *flat* dict of end-of-episode stats: {key: value}.
         Vectors are expanded into indexed keys, e.g., accepted_by_phys_0, ..., P-1.
         """
-        if not states or len(states) != (len(actions) + 1) or len(actions) != len(rewards):
-            raise ValueError("Inconsistent inputs: expect len(states)=len(actions)+1=len(rewards)+1.")
-    
+        if (
+            not states
+            or len(states) != (len(actions) + 1)
+            or len(actions) != len(rewards)
+        ):
+            raise ValueError(
+                "Inconsistent inputs: expect len(states)=len(actions)+1=len(rewards)+1."
+            )
+
         P = self.P
-        #N = states[0].get("N", getattr(self, "N", len(actions)))
+        # N = states[0].get("N", getattr(self, "N", len(actions)))
         session_time = float(self.session_time)
-    
+
         # ---- reconstruct assigns/rejects across steps ----
         accepted_by_phys = [0] * P
         accepted_by_phys_p1 = [0] * P
         accepted_by_phys_p2 = [0] * P
-        nonpref_by_phys  = [0] * P
+        nonpref_by_phys = [0] * P
         nonpref_by_priority = [0] * 2
         rejected_p1 = 0
         rejected_p2 = 0
-        total_arrivals = {1:0, 2:0}
-    
+        total_arrivals = {1: 0, 2: 0}
+
         for k in range(len(actions)):
             s_before = states[k]
-            s_after  = states[k + 1]
-    
-            assigned_before = s_before.get("assigned_per_phys") or [0]*P
-            assigned_after  = s_after.get("assigned_per_phys") or [0]*P
+            s_after = states[k + 1]
+
+            assigned_before = s_before.get("assigned_per_phys") or [0] * P
+            assigned_after = s_after.get("assigned_per_phys") or [0] * P
             deltas = [assigned_after[i] - assigned_before[i] for i in range(P)]
-    
-            if sum(1 for d in deltas if d == 1) == 1 and all(d in (0,1) for d in deltas):
+
+            if sum(1 for d in deltas if d == 1) == 1 and all(
+                d in (0, 1) for d in deltas
+            ):
                 p_exec = deltas.index(1)
                 accepted_by_phys[p_exec] += 1
                 cur = s_before.get("current_patient") or {}
@@ -1286,12 +1434,12 @@ class AppointmentScheduler:
                 pref = int(cur.get("preferred_phys", -1))
                 if 0 <= pref < P and p_exec != pref:
                     nonpref_by_phys[p_exec] += 1
-                    nonpref_by_priority[prio-1] += 1
+                    nonpref_by_priority[prio - 1] += 1
                 if prio == 1:
                     accepted_by_phys_p1[p_exec] += 1
                 elif prio == 2:
                     accepted_by_phys_p2[p_exec] += 1
-                
+
             else:
                 cur = s_before.get("current_patient") or {}
                 prio = int(cur.get("priority", -1))
@@ -1299,123 +1447,147 @@ class AppointmentScheduler:
                     rejected_p1 += 1
                 elif prio == 2:
                     rejected_p2 += 1
-                    
-            total_arrivals[prio] +=1
+
+            total_arrivals[prio] += 1
 
         accepted_total = sum(accepted_by_phys)
         rejected_total = rejected_p1 + rejected_p2
-        
+
         final_state = states[-1]
-        t_final = int(final_state.get("t", len(actions)))  # index of NEXT patient to process
+        t_final = int(
+            final_state.get("t", len(actions))
+        )  # index of NEXT patient to process
         N_total = int(final_state.get("N_total"))
-    
+
         # Detect early termination condition:
         #   - Remaining release == 0 (when Rmax used up), OR
         #   - All per-phys capacities are zero (cap_remaining sums to 0).
         forced_rejects_p1 = 0
         forced_rejects_p2 = 0
-    
+
         remaining_release = final_state.get("remaining_release", None)
         cap_remaining_vec = final_state.get("cap_remaining", None)
-    
-        release_exhausted = (remaining_release is not None and int(remaining_release) == 0 and getattr(self, "Rmax", None) is not None)
-        cap_exhausted = (isinstance(cap_remaining_vec, list) and sum(int(max(0, c)) for c in cap_remaining_vec) == 0)
-    
+
+        release_exhausted = (
+            remaining_release is not None
+            and int(remaining_release) == 0
+            and getattr(self, "Rmax", None) is not None
+        )
+        cap_exhausted = (
+            isinstance(cap_remaining_vec, list)
+            and sum(int(max(0, c)) for c in cap_remaining_vec) == 0
+        )
+
         if t_final < N_total and (release_exhausted or cap_exhausted):
             # All *unseen* patients must be rejected due to hard constraints
             # We can count their priorities from self.patients (authoritative list)
             for idx in range(t_final, N_total):
-                #try:
+                # try:
                 prio = int(getattr(self.patients[idx], "priority", 2))
-                total_arrivals[prio] +=1
+                total_arrivals[prio] += 1
 
                 if prio == 1:
                     forced_rejects_p1 += 1
                 else:
                     forced_rejects_p2 += 1
-    
+
             # Add to explicit rejections
             rejected_p1 += forced_rejects_p1
             rejected_p2 += forced_rejects_p2
             rejected_total = rejected_p1 + rejected_p2
-    
+
         # ---- realized work & overtime from final state ----
         final_state = states[-1]
-        work_per_phys = [float(x) for x in final_state.get("work_per_phys", [0.0]*P)]
+        work_per_phys = [float(x) for x in final_state.get("work_per_phys", [0.0] * P)]
         overtime_per_phys = [max(0.0, w - session_time) for w in work_per_phys]
-        utilization_per_phys = [min(1.0, (w / session_time) if session_time > 0 else 0.0) for w in work_per_phys]
+        utilization_per_phys = [
+            min(1.0, (w / session_time) if session_time > 0 else 0.0)
+            for w in work_per_phys
+        ]
         overtime_total = sum(overtime_per_phys)
-    
+
         # ---- penalties mirroring objective ----
-        reject_penalty = rejected_p1 * float(self.c_miss_1) + rejected_p2 * float(self.c_miss_2)
-    
+        reject_penalty = rejected_p1 * float(self.c_miss_1) + rejected_p2 * float(
+            self.c_miss_2
+        )
+
         nonpref_penalty = 0.0
         for k in range(len(actions)):
-            s_before = states[k]; s_after = states[k+1]
+            s_before = states[k]
+            s_after = states[k + 1]
             deltas = [
-                (s_after.get("assigned_per_phys", [0]*P)[i] -
-                 s_before.get("assigned_per_phys", [0]*P)[i]) for i in range(P)
+                (
+                    s_after.get("assigned_per_phys", [0] * P)[i]
+                    - s_before.get("assigned_per_phys", [0] * P)[i]
+                )
+                for i in range(P)
             ]
-            if sum(1 for d in deltas if d == 1) == 1 and all(d in (0,1) for d in deltas):
+            if sum(1 for d in deltas if d == 1) == 1 and all(
+                d in (0, 1) for d in deltas
+            ):
                 p_exec = deltas.index(1)
                 cur = s_before.get("current_patient") or {}
                 prio = int(cur.get("priority", 2))
                 pref = int(cur.get("preferred_phys", -1))
                 if 0 <= pref < P and p_exec != pref:
-                    nonpref_penalty += float(self.c_nonpref_1 if prio == 1 else self.c_nonpref_2)
-    
+                    nonpref_penalty += float(
+                        self.c_nonpref_1 if prio == 1 else self.c_nonpref_2
+                    )
+
         overtime_penalty = float(self.c_o) * overtime_total
         total_cost = reject_penalty + nonpref_penalty + overtime_penalty
         total_reward = float(sum(rewards))
         total_feasibles = sum(feasibles)
-    
+
         # ---- release usage ----
         flat: Dict[str, float | int] = {}
         Rmax = getattr(self, "Rmax", None)
         if Rmax is not None:
             flat["release_Rmax"] = int(Rmax)
-            flat["release_fraction_used"] = (float(accepted_total) / max(1, int(Rmax)))
-    
+            flat["release_fraction_used"] = float(accepted_total) / max(1, int(Rmax))
+
         # ---- scalar fields ----
-        flat.update({
-            "episode_length": int(len(actions)),
-            "total_reward": total_reward,
-            "total_feasibles": total_feasibles,
-            "total_arrivals": self.N_total,
-            "total_arrivals_p1":total_arrivals[1],
-            "total_arrivals_p2":total_arrivals[2],
-            "accepted_total": int(accepted_total),
-            "rejected_total": int(rejected_total),
-            "rejected_p1": int(rejected_p1),
-            "rejected_p2": int(rejected_p2),
-            "forced_rejects_p1": int(forced_rejects_p1),
-            "forced_rejects_p2": int(forced_rejects_p2),
-            "forced_rejects_total": int(forced_rejects_p1 + forced_rejects_p2),
-            "nonpref_assignments_total": int(sum(nonpref_by_phys)),
-            "nonpref_assignments_p1": int(nonpref_by_priority[0]),
-            "nonpref_assignments_p2": int(nonpref_by_priority[1]),
-            "overtime_minutes_total": float(overtime_total),
-            "reject_penalty": float(reject_penalty),
-            "nonpref_penalty": float(nonpref_penalty),
-            "overtime_penalty": float(overtime_penalty),
-            "total_cost": float(total_cost),
-        })
-    
+        flat.update(
+            {
+                "episode_length": int(len(actions)),
+                "total_reward": total_reward,
+                "total_feasibles": total_feasibles,
+                "total_arrivals": self.N_total,
+                "total_arrivals_p1": total_arrivals[1],
+                "total_arrivals_p2": total_arrivals[2],
+                "accepted_total": int(accepted_total),
+                "rejected_total": int(rejected_total),
+                "rejected_p1": int(rejected_p1),
+                "rejected_p2": int(rejected_p2),
+                "forced_rejects_p1": int(forced_rejects_p1),
+                "forced_rejects_p2": int(forced_rejects_p2),
+                "forced_rejects_total": int(forced_rejects_p1 + forced_rejects_p2),
+                "nonpref_assignments_total": int(sum(nonpref_by_phys)),
+                "nonpref_assignments_p1": int(nonpref_by_priority[0]),
+                "nonpref_assignments_p2": int(nonpref_by_priority[1]),
+                "overtime_minutes_total": float(overtime_total),
+                "reject_penalty": float(reject_penalty),
+                "nonpref_penalty": float(nonpref_penalty),
+                "overtime_penalty": float(overtime_penalty),
+                "total_cost": float(total_cost),
+            }
+        )
+
         # ---- expand vectors into indexed keys ----
         for i in range(P):
-            flat[f"accepted_by_phys_{i}"]            = int(accepted_by_phys[i])
-            flat[f"accepted_by_phys_{i}_p1"]         = int(accepted_by_phys_p1[i])
-            flat[f"accepted_by_phys_{i}_p2"]         = int(accepted_by_phys_p2[i])
+            flat[f"accepted_by_phys_{i}"] = int(accepted_by_phys[i])
+            flat[f"accepted_by_phys_{i}_p1"] = int(accepted_by_phys_p1[i])
+            flat[f"accepted_by_phys_{i}_p2"] = int(accepted_by_phys_p2[i])
             flat[f"nonpref_assignments_by_phys_{i}"] = int(nonpref_by_phys[i])
-            flat[f"realized_work_per_phys_{i}"]      = float(work_per_phys[i])
-            flat[f"overtime_minutes_per_phys_{i}"]   = float(overtime_per_phys[i])
-            flat[f"utilization_per_phys_{i}"]        = float(utilization_per_phys[i])
+            flat[f"realized_work_per_phys_{i}"] = float(work_per_phys[i])
+            flat[f"overtime_minutes_per_phys_{i}"] = float(overtime_per_phys[i])
+            flat[f"utilization_per_phys_{i}"] = float(utilization_per_phys[i])
         return flat
-            
+
     # ============================
     # Regenerate future patients
     # ============================
-    
+
     def _synthesize_patient_from_state_cur(self, cur_state: dict) -> "Patient":
         """
         Build a full Patient from a minimal current-patient dict in state:
@@ -1424,28 +1596,32 @@ class AppointmentScheduler:
         """
         # Required fields (with safe defaults)
         pid = str(cur_state.get("pid", f"pat_{cur_state.get('n', 0)}"))
-        n   = int(cur_state.get("n", cur_state.get("_id", 0)))
-        preferred_phys  = int(cur_state.get("preferred_phys", 0))
-        preferred_slot  = int(cur_state.get("preferred_slot", -1))
-        priority        = int(cur_state.get("priority", 2))
-    
+        n = int(cur_state.get("n", cur_state.get("_id", 0)))
+        preferred_phys = int(cur_state.get("preferred_phys", 0))
+        preferred_slot = int(cur_state.get("preferred_slot", -1))
+        priority = int(cur_state.get("priority", 2))
+
         # --- Generate the missing bits using your existing distributions/rules ---
-    
+
         # Duration from your truncated lognormal per priority
         duration = int(cur_state.get("duration"))
         score = cur_state.get("score")
         E_map = cur_state.get("eligible_phys")
-        E_map = {i: E_map[i] for i in range(len(E_map)) }
+        E_map = {i: E_map[i] for i in range(len(E_map))}
         # Physician-level acceptability A[p]: preferred = 1; others with accept_prob
-        
+
         # Mask A by E
         A_map: dict[int, int] = {}
         for p in range(self.P):
             if E_map.get(p, 0) == 0:
                 A_map[p] = 0
             else:
-                A_map[p] = 1 if p == preferred_phys else int(self.rejection_generator.uniform() < self.accept_prob)
-    
+                A_map[p] = (
+                    1
+                    if p == preferred_phys
+                    else int(self.rejection_generator.uniform() < self.accept_prob)
+                )
+
         # --- Attendance Y[p] ---
         Y_map: dict[int, float] = {}
         if priority == 2:
@@ -1456,8 +1632,10 @@ class AppointmentScheduler:
                 if p == preferred_phys:
                     Y_map[p] = 1.0
                 else:
-                    Y_map[p] = float(int(self.show_generator.uniform() < self.show_prob))
-    
+                    Y_map[p] = float(
+                        int(self.show_generator.uniform() < self.show_prob)
+                    )
+
         # Construct Patient (assumes your Patient dataclass/ctor matches these fields)
         return Patient(
             pid=pid,
@@ -1469,9 +1647,9 @@ class AppointmentScheduler:
             A=A_map,
             Y=Y_map,
             score=score,
-            eligible=E_map
+            eligible=E_map,
         )
-    
+
     def select_physician(self, state: dict, allow_reject_if_none: bool = True) -> int:
         cur = state.get("current_patient")
         if not cur:
@@ -1479,19 +1657,18 @@ class AppointmentScheduler:
         P = self.P
         preferred = int(cur.get("preferred_phys", 0))
         avail = list(cur.get("available_phys") or [1] * P)
-        elig  = list(cur.get("eligible_phys")  or [1] * P)
-    
+        elig = list(cur.get("eligible_phys") or [1] * P)
+
         # Preferred if both available and eligible
         if 0 <= preferred < P and (avail[preferred] == 1) and (elig[preferred] == 1):
             return preferred
-    
+
         # Random among available & eligible
         candidates = [p for p in range(P) if (avail[p] == 1 and elig[p] == 1)]
         if candidates:
             return int(self.phys_generator.choice(candidates))
         return self.P if allow_reject_if_none else -1
 
-    
     # def _sample_total_N_given_arrivals(self,
     #     n_already: dict,
     #     max_tries: int = 1000,
@@ -1499,7 +1676,7 @@ class AppointmentScheduler:
     #     """
     #     Sample an integer total N ~ Normal(mean, std^2) conditional on N >= n_already.
     #     Uses rejection sampling, rounds to nearest int, and enforces bounds.
-    
+
     #     Parameters
     #     ----------
     #     n_already : int
@@ -1516,12 +1693,12 @@ class AppointmentScheduler:
     #         RNG seed for reproducibility.
     #     max_tries : int, default 1000
     #         Maximum rejection attempts before falling back to a clipped value.
-    
+
     #     Returns
     #     -------
     #     int
     #         A sampled total N that satisfies N >= n_already and N in [N_min, N_max].
-    
+
     #     Notes
     #     -----
     #     - This is an exact sample from the conditional distribution
@@ -1530,7 +1707,7 @@ class AppointmentScheduler:
     #     - If acceptance becomes extremely unlikely (deep tail), the function
     #       falls back to a clipped rounded mean to ensure progress.
     #     """
-        
+
     #     if self.sigma1 == 0:
     #         N1 = max(self.N1, n_already[1])
     #     else:
@@ -1542,11 +1719,11 @@ class AppointmentScheduler:
     #                 N1 = candidate
     #                 accepted = True
     #                 break
-    
+
     #         if not accepted:
     #             # fallback (clipped mean)
     #             N1 = max(int(round(self.N1)), n_already[1])
-    
+
     #     # ---- Sample N2 ----
     #     if self.sigma2 == 0:
     #         N2 = max(self.N2, n_already[2])
@@ -1559,14 +1736,14 @@ class AppointmentScheduler:
     #                 N2 = candidate
     #                 accepted = True
     #                 break
-    
+
     #         if not accepted:
     #             N2 = max(int(round(self.N2)), n_already[2])
-    
+
     #     return N1 , N2
-    
+
     # def _sample_total_N_given_arrivals(self, n_already: dict, **kwargs) -> tuple[int, int]:
-        
+
     #     def sample_truncated(mu, sigma, n_min):
     #         if sigma == 0:
     #             return max(mu, n_min)
@@ -1576,18 +1753,17 @@ class AppointmentScheduler:
     #         rv = truncnorm(a=a, b=np.inf, loc=mu, scale=sigma)
     #         draw = rv.rvs(random_state=self.p_generator)
     #         return max(n_min, int(round(draw)))
-        
+
     #     N1 = sample_truncated(self.N1, self.sigma1, n_already[1])
     #     N2 = sample_truncated(self.N2, self.sigma2, n_already[2])
     #     return N1, N2
-    
+
     def _sample_N_future(self, n_already: dict, s_mid: float) -> tuple[int, int]:
 
-    
         def sample(mu, sigma, n_arrived, a, b):
             # P(score < s_mid) under Beta(a, b)
             p = beta_dist.cdf(s_mid, a, b)
-    
+
             # Discrete posterior: P(N_total | n_arrived) ∝ Binom(n_arrived; N_total, p) * Normal(N_total; mu, sigma)
             # Cover both prior and likelihood peak
             likelihood_peak = int(n_arrived / p) if p > 1e-9 else mu
@@ -1597,43 +1773,43 @@ class AppointmentScheduler:
             likelihood = binom.pmf(n_arrived, N_vals, p)
             weights = prior * likelihood
             weights /= weights.sum()
-    
+
             N_total = int(self.p_generator.choice(N_vals, p=weights))
-    
+
             # All remaining must arrive after s_mid — no Binomial
             return max(0, N_total - n_arrived)
-    
+
         N1_future = sample(self.N1, self.sigma1, n_already[1], 3.0, 1.0)
         N2_future = sample(self.N2, self.sigma2, n_already[2], 1.0, 1.0)
-    
+
         return N1_future, N2_future
-    
+
     def _sample_N_future_rejection(
         self,
         n_already: dict,
         s_mid: float,
         max_tries: int = 100_000,
     ) -> tuple[int, int]:
-        #from scipy.stats import beta as beta_dist, norm, binom
-    
+        # from scipy.stats import beta as beta_dist, norm, binom
+
         a1, b1 = 3.0, 1.0  # P1: Beta(3,1)
         a2, b2 = 1.0, 1.0  # P2: Beta(1,1)
-    
+
         p1 = beta_dist.cdf(s_mid, a1, b1)
         p2 = beta_dist.cdf(s_mid, a2, b2)
-    
+
         n1_arrived = n_already[1]
         n2_arrived = n_already[2]
-    
+
         def rejection_sample(mu, sigma, n_arrived, a, b, p):
             """
             Rejection sample N_future for one priority independently.
             """
             for _ in range(max_tries):
                 # Draw N_total from prior
-                N_total = max(n_arrived, int(round(
-                    self.p_generator.normal(loc=mu, scale=sigma)
-                )))
+                N_total = max(
+                    n_arrived, int(round(self.p_generator.normal(loc=mu, scale=sigma)))
+                )
                 # Draw all scores
                 scores = self.rank_generator.beta(a, b, size=N_total)
                 # Count past arrivals
@@ -1642,77 +1818,91 @@ class AppointmentScheduler:
                 if n_simulated == n_arrived:
                     return int(np.sum(scores > s_mid))
             return None  # failed
-    
+
         # --- P1 ---
         N1_future = rejection_sample(self.N1, self.sigma1, n1_arrived, a1, b1, p1)
-    
+
         # --- P2 ---
         N2_future = rejection_sample(self.N2, self.sigma2, n2_arrived, a2, b2, p2)
-    
+
         # --- Fallback if either failed ---
         def posterior_fallback(mu, sigma, n_arrived, a, b):
             p = beta_dist.cdf(s_mid, a, b)
             likelihood_peak = int(n_arrived / p) if p > 1e-9 else mu
-            N_max = int(max(mu + 6*sigma, likelihood_peak + 6*sigma))
+            N_max = int(max(mu + 6 * sigma, likelihood_peak + 6 * sigma))
             N_vals = np.arange(n_arrived, N_max + 1)
-            prior      = norm.pdf(N_vals, mu, sigma)
+            prior = norm.pdf(N_vals, mu, sigma)
             likelihood = binom.pmf(n_arrived, N_vals, p)
-            weights    = prior * likelihood
-            total      = weights.sum()
+            weights = prior * likelihood
+            total = weights.sum()
             if total < 1e-300:
                 N_total = max(n_arrived, likelihood_peak)
             else:
                 weights /= total
                 N_total = int(self.p_generator.choice(N_vals, p=weights))
             return max(0, N_total - n_arrived)
-    
+
         if N1_future is None:
-            print(f"[WARN] P1 rejection failed (n1={n1_arrived}, s_mid={s_mid:.4f}). Using posterior fallback.")
+            print(
+                f"[WARN] P1 rejection failed (n1={n1_arrived}, s_mid={s_mid:.4f}). Using posterior fallback."
+            )
             N1_future = posterior_fallback(self.N1, self.sigma1, n1_arrived, a1, b1)
-    
+
         if N2_future is None:
-            print(f"[WARN] P2 rejection failed (n2={n2_arrived}, s_mid={s_mid:.4f}). Using posterior fallback.")
+            print(
+                f"[WARN] P2 rejection failed (n2={n2_arrived}, s_mid={s_mid:.4f}). Using posterior fallback."
+            )
             N2_future = posterior_fallback(self.N2, self.sigma2, n2_arrived, a2, b2)
-    
+
         return N1_future, N2_future
 
-
-    def regenerate_scenario(self, state: Dict, patients: Optional[List["Patient"]] = None, new: int = 1):
+    def regenerate_scenario(
+        self, state: Dict, patients: Optional[List["Patient"]] = None, new: int = 1
+    ):
         if "t" not in state:
-            raise ValueError("State missing 't'. Pass a state returned by reset_sim()/step().")
-    
+            raise ValueError(
+                "State missing 't'. Pass a state returned by reset_sim()/step()."
+            )
+
         t = int(state["t"])
         cur_state = state.get("current_patient", None)
-    
+
         cur_pat = self._synthesize_patient_from_state_cur(cur_state)
         cur_pat.pid = f"regen_{cur_pat.pid}"
         regenerated: List["Patient"] = [cur_pat]
-    
+
         # s_mid is the current patient's score — all future scores must be > s_mid
-        s_mid = float(getattr(cur_pat, "score", 0.0))       # <-- NEW
+        s_mid = float(getattr(cur_pat, "score", 0.0))  # <-- NEW
         N_curr = state["patient_count"]
-    
+
         # Model B: exact posterior, N_future = N_total - n_arrived directly
         N1_future, N2_future = self._sample_N_future(N_curr, s_mid)  # <-- NEW
-    
+
         if int(new) == 1:
             for k in range(N1_future):
-                p = self.generate_patient(cur_pat._id + 1 + k, 1, score_lower=s_mid)  # <-- score_lower
+                p = self.generate_patient(
+                    cur_pat._id + 1 + k, 1, score_lower=s_mid
+                )  # <-- score_lower
                 regenerated.append(p)
             for k in range(N2_future):
-                p = self.generate_patient(cur_pat._id + N1_future + 1 + k, 2, score_lower=s_mid)  # <-- score_lower
+                p = self.generate_patient(
+                    cur_pat._id + N1_future + 1 + k, 2, score_lower=s_mid
+                )  # <-- score_lower
                 regenerated.append(p)
-    
+
             ordered = sorted(regenerated, key=lambda p: p.score)
             for rank, p in enumerate(ordered):
                 p._id = rank
                 p.pid = f"regenpat_{p.priority}_{rank}"
             regenerated = ordered
-    
+
         else:
             # new == 0 path unchanged
             base = patients if (patients is not None) else self.patients
-            future_same = sorted([p for p in base if int(p._id) > int(cur_pat._id)], key=lambda q: int(q._id))
+            future_same = sorted(
+                [p for p in base if int(p._id) > int(cur_pat._id)],
+                key=lambda q: int(q._id),
+            )
             for p in future_same:
                 pcopy = type(p)(
                     pid=f"regen_{p.pid}",
@@ -1724,11 +1914,12 @@ class AppointmentScheduler:
                     A=dict(getattr(p, "A", {})),
                     Y=dict(getattr(p, "Y", {})),
                     score=float(getattr(p, "score", 0.0)),
-                    eligible=dict(getattr(p, "eligible", {}))
+                    eligible=dict(getattr(p, "eligible", {})),
                 )
                 regenerated.append(pcopy)
-    
-        self.regenerated_patients = regenerated    
+
+        self.regenerated_patients = regenerated
+
     # ============================
     # Simulation trace persistence
     # ============================
@@ -1745,40 +1936,49 @@ class AppointmentScheduler:
         """
         Save per-step simulation trace to CSV and, on the terminal step (early stop),
         add forced rejections for all *remaining* patients to the cumulative reject counts.
-    
+
         Notes:
           - Availability uses capacity-driven 'available_phys' (not acceptability A).
           - Duration/Y are read from self.patients[n].
           - 'feasibles' is an external list you pass per step for debugging (0/1 or bool).
         """
         # Basic checks
-        if not states or len(states) != (len(actions) + 1) or len(actions) != len(rewards):
-            raise ValueError("Inconsistent inputs: expect len(states)=len(actions)+1=len(rewards)+1.")
-    
+        if (
+            not states
+            or len(states) != (len(actions) + 1)
+            or len(actions) != len(rewards)
+        ):
+            raise ValueError(
+                "Inconsistent inputs: expect len(states)=len(actions)+1=len(rewards)+1."
+            )
+
         out_dir = self.out_dir if not folder else os.path.join(self.out_dir, folder)
         os.makedirs(out_dir, exist_ok=True)
         path = os.path.join(out_dir, f"{tag}_sim_trace.csv")
-    
+
         # Headers
         base_cols = [
             "step",
             "t_before",
             "action_raw",
-            "executed",             # "assign" | "reject"
-            "executed_phys",        # -1 if reject
+            "executed",  # "assign" | "reject"
+            "executed_phys",  # -1 if reject
             "reward",
             "feasible",
             "cumulative_reward",
             "done_after_step",
-    
             # Patient snapshot
-            "n", "pid", "priority", "score", "duration",
-            "preferred_phys", "eligible",
-    
+            "n",
+            "pid",
+            "priority",
+            "score",
+            "duration",
+            "preferred_phys",
+            "eligible",
             # Availability hint for preferred
             "available_phys_pref",
         ]
-    
+
         vector_cols = [
             "available_phys_vec",
             "Y_map_vec",
@@ -1786,58 +1986,58 @@ class AppointmentScheduler:
             "assigned_per_phys_vec",
             "cap_remaining_vec",
         ]
-    
+
         agg_cols = [
             "accepted_count_before",
             "accepted_count_after",
             "accepted_count_after_p1",
             "accepted_count_after_p2",
-            "total_rejected",                # includes forced rejections if terminal
-            "rejected_count_after_p1",       # includes forced rejections if terminal
-            "rejected_count_after_p2",       # includes forced rejections if terminal
+            "total_rejected",  # includes forced rejections if terminal
+            "rejected_count_after_p1",  # includes forced rejections if terminal
+            "rejected_count_after_p2",  # includes forced rejections if terminal
             "remaining_release_before",
         ]
-    
+
         overtime_cols = [
             "overtime_minutes_per_phys_after",
         ]
-    
+
         headers = base_cols + agg_cols
         if include_vectors:
             headers += vector_cols
         headers += overtime_cols
-    
+
         # Running tallies (by priority) for accepted / rejected *so far*
         accepted_count_after = {1: 0, 2: 0}
         rejected_count_after = {1: 0, 2: 0}
-    
+
         cum = 0.0
-    
+
         with open(path, "w", newline="") as f:
             w = csv.writer(f)
             w.writerow(headers)
-    
+
             for k in range(len(actions)):
                 s_before = states[k]
-                s_after  = states[k + 1]
+                s_after = states[k + 1]
                 a = int(actions[k])
                 r = float(rewards[k])
                 feas = feasibles[k]
                 cum += r
-    
+
                 # For remaining computation on terminal step
-                t_after = int(s_after.get("t", s_before.get("t", 0) + 1))   # NEW
-    
+                t_after = int(s_after.get("t", s_before.get("t", 0) + 1))  # NEW
+
                 # Current patient snapshot
                 cur = s_before.get("current_patient") or {}
                 pid = cur.get("pid", "")
-                n   = int(cur.get("n", -1))
+                n = int(cur.get("n", -1))
                 prio = int(cur.get("priority", -1))
                 score = cur.get("score", -1)
                 pref = int(cur.get("preferred_phys", -1))
                 # Your state sometimes has 'eligible_phys', you want to log under 'eligible'
                 elig = cur.get("eligible_phys", cur.get("eligible", None))
-    
+
                 # Duration & Y from master list
                 if 0 <= n < len(self.patients):
                     dur = float(getattr(self.patients[n], "duration", 0.0))
@@ -1846,7 +2046,7 @@ class AppointmentScheduler:
                 else:
                     dur = 0.0
                     y_map_vec = None
-    
+
                 # Availability vector at decision time
                 avail_vec = cur.get("available_phys", None)
                 if avail_vec is None:
@@ -1854,13 +2054,15 @@ class AppointmentScheduler:
                 available_pref = None
                 if isinstance(avail_vec, list) and 0 <= pref < len(avail_vec):
                     available_pref = int(avail_vec[pref])
-    
+
                 # Determine executed effect by counting assignment deltas
-                assigned_before = s_before.get("assigned_per_phys") or [0]*self.P
-                assigned_after  = s_after.get("assigned_per_phys") or [0]*self.P
+                assigned_before = s_before.get("assigned_per_phys") or [0] * self.P
+                assigned_after = s_after.get("assigned_per_phys") or [0] * self.P
                 deltas = [assigned_after[i] - assigned_before[i] for i in range(self.P)]
-    
-                if sum(1 for d in deltas if d == 1) == 1 and all(d in (0, 1) for d in deltas):
+
+                if sum(1 for d in deltas if d == 1) == 1 and all(
+                    d in (0, 1) for d in deltas
+                ):
                     executed = "assign"
                     executed_phys = deltas.index(1)
                     accepted_count_after[prio] += 1
@@ -1869,11 +2071,13 @@ class AppointmentScheduler:
                     executed_phys = -1
                     if prio in (1, 2):
                         rejected_count_after[prio] += 1
-    
+
                 # Overtime minutes after the step
-                work_after = s_after.get("work_per_phys") or [0.0]*self.P
-                overtime_after = [max(0.0, wmin - self.session_time) for wmin in work_after]
-    
+                work_after = s_after.get("work_per_phys") or [0.0] * self.P
+                overtime_after = [
+                    max(0.0, wmin - self.session_time) for wmin in work_after
+                ]
+
                 # ---- If terminal now, add FORCED rejections for all remaining patients ----
                 done_after = bool(s_after.get("done", False))
                 forced_rej_p1 = 0
@@ -1891,7 +2095,7 @@ class AppointmentScheduler:
                     rejected_count_after[1] += forced_rej_p1
                     rejected_count_after[2] += forced_rej_p2
                 # -------------------------------------------------------------------------
-    
+
                 row = [
                     k,
                     int(s_before.get("t", -1)),
@@ -1902,30 +2106,45 @@ class AppointmentScheduler:
                     feas,
                     cum,
                     done_after,
-                    n, pid, prio, score, dur, pref, elig,
+                    n,
+                    pid,
+                    prio,
+                    score,
+                    dur,
+                    pref,
+                    elig,
                     available_pref if available_pref is not None else "",
                     int(s_before.get("accepted_count", 0)),
                     int(s_after.get("accepted_count", 0)),
-                    accepted_count_after[1], accepted_count_after[2],
+                    accepted_count_after[1],
+                    accepted_count_after[2],
                     (rejected_count_after[1] + rejected_count_after[2]),
-                    rejected_count_after[1], rejected_count_after[2],
-                    int(s_before.get("remaining_release", 0) if s_before.get("remaining_release") is not None else 0),
+                    rejected_count_after[1],
+                    rejected_count_after[2],
+                    int(
+                        s_before.get("remaining_release", 0)
+                        if s_before.get("remaining_release") is not None
+                        else 0
+                    ),
                 ]
-    
+
                 if include_vectors:
                     row += [
                         json.dumps(avail_vec) if avail_vec is not None else "",
                         json.dumps(y_map_vec) if y_map_vec is not None else "",
                         json.dumps(s_before.get("work_per_phys", [])),
                         json.dumps(s_before.get("assigned_per_phys", [])),
-                        json.dumps(s_before.get("cap_remaining", [])) if s_before.get("cap_remaining", None) is not None else "",
+                        (
+                            json.dumps(s_before.get("cap_remaining", []))
+                            if s_before.get("cap_remaining", None) is not None
+                            else ""
+                        ),
                     ]
-    
+
                 row += [json.dumps(overtime_after)]
                 w.writerow(row)
 
-
-    def run_and_save_sim(self, policy_fn, tag: str, folder:str = "greedy"):
+    def run_and_save_sim(self, policy_fn, tag: str, folder: str = "greedy"):
         """
         Convenience wrapper:
           - (optionally) configure the simulator via init_sim(**init_kwargs)
@@ -1935,15 +2154,18 @@ class AppointmentScheduler:
         """
 
         traj = self.simulate_policy(policy_fn)
-        self.save_sim_trace_csv(tag, traj["states"], traj["actions"], traj["rewards"], traj["feasibles"])
-        stats = self.collect_stats(traj["states"], traj["actions"], traj["rewards"], traj["feasibles"])
+        self.save_sim_trace_csv(
+            tag, traj["states"], traj["actions"], traj["rewards"], traj["feasibles"]
+        )
+        stats = self.collect_stats(
+            traj["states"], traj["actions"], traj["rewards"], traj["feasibles"]
+        )
         out_dir = os.path.join(self.out_dir, folder)
         os.makedirs(out_dir, exist_ok=True)
         path = os.path.join(out_dir, f"Sim_Stats_{tag}.json")
         with open(path, "w") as f:
             json.dump(stats, f, indent=2)
         return traj
-
 
     # ---------------------------- End-to-end run ----------------------------
 
@@ -1955,61 +2177,12 @@ class AppointmentScheduler:
         status, term, gap, t = self.solve(tee=tee)
         sol, obj = self.extract_solution(self.patients)
         self.save_solution_files(tag, sol, obj, status, term, gap, t)
-        print(f"Status={status} Termination={term} Obj={obj:.2f} Gap={gap} Time={t:.2f}s")
+        print(
+            f"Status={status} Termination={term} Obj={obj:.2f} Gap={gap} Time={t:.2f}s"
+        )
         return sol, obj
-    
-    
-#-----------------------------------------------------------
+
+
+# -----------------------------------------------------------
 # CLI
 # ------------------------------------------------------------
-
-if __name__ == "__main__":
-    
-    stop_flag = False
-    thread = threading.Thread(target=track_memory)
-    thread.start()
-    
-    args = parse_args()
-    config = build_config(args)
-    
-    sched = AppointmentScheduler(
-        n_patients1=config.ocs_param['N1'],
-        sigma1=config.ocs_param['sigma1'],
-        n_patients2=config.ocs_param['N2'],
-        sigma2=config.ocs_param['sigma2'],
-        n_phys=config.ocs_param['P'],
-        n_slots=config.ocs_param['I'],
-        k_max=config.ocs_param['k_max'],
-        k_min=config.ocs_param['k_min'],
-        # --- costs wired to your class fields used in build_model ---
-        c_miss_1=config.ocs_param['c_miss_1'],
-        c_miss_2=config.ocs_param['c_miss_2'],
-        c_overtime=config.ocs_param['co'],
-        c_np_per=config.ocs_param['cnp'],
-        physician_weights=config.ocs_param['physician_weights'],
-        release_cap=config.ocs_param['Rmax'],
-        cap_per_phys=config.ocs_param['L'],
-        var=config.ocs_param['var'],
-        time_limit=config.time_limit,
-        seed=config.seed,
-    )
-    
-    
-    tag = f"OCS_{config.seed}"
-    sched.run(tag=tag, solver='gurobi', tee=True)
-    
-    sched.init_sim(enforce_cap_per_phys=True, respect_release_cap=True, reward_scale=1.0)
-    
-    # run it
-    tag = f"OCS_greedy_{config.seed}"
-    summary = sched.run_and_save_sim(sched.select_physician, tag=tag)
-    print("Total reward:", summary["total_reward"])
-    print("Overtime per phys:", summary["overtime_minutes_per_phys"])
-    print("Overtime penalty:", summary["overtime_penalty"])
-    
-    state = {'t': 10, 'N1': 25, 'N2': 75, 'N_total': 98, 'P': 4, 'Rmax': 80, 'session_time': 240, 'patients_arrived': 5, 'patient_count': {1: 5, 2: 10}, 'current_patient': {'n': 10, 'pid': 'pat_2_10', 'priority': 2, 'score': 0.14974896724410341, 'duration': 12.0, 'preferred_phys': 0, 'available_phys': [1, 1, 1, 1], 'eligible_phys': [1, 1, 0, 0]}, 'work_per_phys': [60.0, 31.0, 11.0, 0.0], 'assigned_per_phys': [6, 3, 1, 0], 'cap_remaining': [14, 17, 19, 20], 'accepted_count': 10, 'accepted_priority_phy': {0: {1: 0, 2: 7}, 1: {1: 0, 2: 3}, 2: {1: 1, 2: 0}, 3: {1: 0, 2: 0}}, 'remaining_release': 70, 'done': False}
-    sched.regenerate_scenario(state)
-    sched.build_model(sched.regenerated_patients, state=state)
-    status, termination, gap, sol_time = sched.solve(tee=True)
-    stop_flag = True
-    thread.join()

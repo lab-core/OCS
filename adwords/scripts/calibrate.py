@@ -9,10 +9,10 @@ import sys
 import numpy as np
 from udagger import run_episode
 
-from ilco_adwords.experts import Expert
-from ilco_adwords.market import make_market, sample_episode
-from ilco_adwords.problem import AdwordsProblem
-from ilco_adwords.solver import offline_optimum
+from udagger_adwords.experts import Expert
+from udagger_adwords.market import make_market, sample_episode
+from udagger_adwords.problem import AdwordsProblem
+from udagger_adwords.solver import offline_optimum
 
 # Episodes used only for calibration (test, valid and train start at 1e6, 2e6
 # and 3e6 + 1e6 * run, see market.episode_seed).

@@ -2,7 +2,7 @@
 
 Usage::
 
-    python ppa/analysis/make_results.py DATA_DIR PAPER_DIR
+    python ppa/legacy/analysis/make_results.py DATA_DIR PAPER_DIR
 
 ``DATA_DIR`` is ``ppa/data`` (training folders and ``evaluation/``). The
 script writes ``tables/ppa_main.tex``, ``tables/ppa_gap.tex``,

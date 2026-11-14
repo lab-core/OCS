@@ -27,7 +27,7 @@ import numpy as np
 import scipy.sparse as sp
 from gurobipy import GRB
 
-from ilco_adwords.market import Market
+from udagger_adwords.market import Market
 
 _ENV: gp.Env | None = None
 TIE_BREAK = 1e-3

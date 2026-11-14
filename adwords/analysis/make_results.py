@@ -4,7 +4,7 @@ Usage::
 
     python analysis/make_results.py RESULTS_DIR PAPER_DIR
 
-``RESULTS_DIR`` is the output directory of ``ilco_adwords.cli``; LaTeX tables
+``RESULTS_DIR`` is the output directory of ``udagger_adwords.cli``; LaTeX tables
 are written to ``PAPER_DIR/tables`` and PDF figures to ``PAPER_DIR/figs``.
 Every number reported in the paper for AdWords is produced by this script.
 """

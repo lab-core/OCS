@@ -41,7 +41,7 @@ for scen in 30
 
         	if [ $SLURM_ARRAY_TASK_ID -eq $i ]
 		then
-	    		python ../src/Learn_Main.py  --N $N --s $s --P $P --I 8 --L 20 --adapter $adapter  --kmin $kmin --kmax $P --pw $pw  --cnp 10 --co 0  --runs $runs --new $new  --scenarios $scen --stoch $stoch --um $um --learn_iter $li  --resume $cont --use_weight $w --lm $lm --time_limit $tl --vanilla $vanilla --gated $gated > ../Doutput/output$li$P$s$tl$kmin$pw$scen$new$stoch$runs.txt	
+	    		python ../Learn_Main.py  --N $N --s $s --P $P --I 8 --L 20 --adapter $adapter  --kmin $kmin --kmax $P --pw $pw  --cnp 10 --co 0  --runs $runs --new $new  --scenarios $scen --stoch $stoch --um $um --learn_iter $li  --resume $cont --use_weight $w --lm $lm --time_limit $tl --vanilla $vanilla --gated $gated > ../Doutput/output$li$P$s$tl$kmin$pw$scen$new$stoch$runs.txt	
 	    		
 		fi
 	    	(( i = $i +1 ))

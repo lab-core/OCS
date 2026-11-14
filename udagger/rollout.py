@@ -34,6 +34,7 @@ class EpisodeResult:
         solve_time: Total expert labelling time.
         max_gap: Largest optimality gap reported by the expert.
         n_labels: Number of labelled states.
+        n_decisions: Number of decision epochs of the episode.
         data: Labelled samples (``x``, ``target``, ``mask``, ``expert_action``
             and the keys of ``Episode.info``), or None.
     """
@@ -43,6 +44,7 @@ class EpisodeResult:
     solve_time: float = 0.0
     max_gap: float = 0.0
     n_labels: int = 0
+    n_decisions: int = 0
     data: dict[str, np.ndarray] | None = field(default=None, repr=False)
 
     @property
@@ -85,7 +87,9 @@ def run_episode(
     rows: dict[str, list] = {}
     solve_time = 0.0
     max_gap = 0.0
+    n_decisions = 0
     while not episode.done:
+        n_decisions += 1
         state = episode.observe()
         use_expert = expert is not None and (policy is None or rng.random() < beta)
         label = None
@@ -121,6 +125,7 @@ def run_episode(
         solve_time=solve_time,
         max_gap=max_gap,
         n_labels=len(rows.get("x", [])),
+        n_decisions=n_decisions,
     )
     if rows:
         result.data = {

@@ -6,13 +6,13 @@
 #SBATCH --mem-per-cpu=4G
 #SBATCH --job-name=ppa
 set -euo pipefail
-source env.sh
+source env.sh  # legacy/slurm/env.sh
 LINE=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$1")
 echo "task ${SLURM_ARRAY_TASK_ID}: ${LINE}"
 kind=learn mode=dagger expert="" mg=0.02 rep=0 tl=30
 eval "${LINE}"
 CPUS=${SLURM_CPUS_PER_TASK:-2}
-cd ../src
+cd ..
 # Instance and learning options of the IJOO study (bash/batch_learn.sh).
 COMMON="--N1 25 --s1 5 --N2 75 --s2 12 --P 4 --I 8 --L 20 --adapter flat \
 --var 1 --kmin 1 --kmax 4 --pw 1 --cnp 10 --co 0 --use_weight 0 --vanilla 1 --gated 0 --evolve_expert 0 --time_limit ${tl} --mipgap ${mg}"

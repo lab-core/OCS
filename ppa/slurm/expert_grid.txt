@@ -1,13 +1,14 @@
-kind=greedy
-kind=hindsight mg=0 tl=300
-kind=expert expert="--stoch 0 --new 1 --scenarios 1"
-kind=expert expert="--stoch 0 --new 1 --scenarios 5"
-kind=expert expert="--stoch 0 --new 1 --scenarios 15"
-kind=expert expert="--stoch 0 --new 1 --scenarios 30"
-kind=expert expert="--stoch 1 --new 1 --scenarios 5"
-kind=expert expert="--stoch 1 --new 1 --scenarios 15"
-kind=expert expert="--stoch 1 --new 1 --scenarios 30"
-kind=expert expert="--stoch 1 --new 1 --scenarios 30" mg=0.002
-kind=expert expert="--stoch 1 --new 1 --scenarios 30" mg=0.01
-kind=expert expert="--stoch 1 --new 1 --scenarios 30" mg=0.05
-kind=expert expert="--stoch 1 --new 1 --scenarios 30" mg=0.1
+hindsight
+expert --expert greedy
+expert --expert full --scenarios 1
+expert --expert det --scenarios 1
+expert --expert agg --scenarios 5
+expert --expert agg --scenarios 15
+expert --expert agg --scenarios 30
+expert --expert saa --scenarios 5
+expert --expert saa --scenarios 15
+expert --expert saa --scenarios 30
+expert --expert saa --scenarios 30 --gap 0.002
+expert --expert saa --scenarios 30 --gap 0.01
+expert --expert saa --scenarios 30 --gap 0.05
+expert --expert saa --scenarios 30 --gap 0.1

@@ -49,7 +49,7 @@ do
 
 	        if [ $SLURM_ARRAY_TASK_ID -eq $i ]
 		then
-	    		    	python ../src/Merge_sim_trace.py --kmin $kmin --s1 $s1 --s2 $s2  --adapter $adapter --pw $pw --new $new  --scenarios $scen --stoch $stoch --lm $lm --learn_iter $li --runs $runs --time_limit $tl --evolve_expert 0 --mipgap $mg > ../Moutput/Moutput$runs$li$new$mg$scen.txt
+	    		    	python ../Merge_sim_trace.py --kmin $kmin --s1 $s1 --s2 $s2  --adapter $adapter --pw $pw --new $new  --scenarios $scen --stoch $stoch --lm $lm --learn_iter $li --runs $runs --time_limit $tl --evolve_expert 0 --mipgap $mg > ../Moutput/Moutput$runs$li$new$mg$scen.txt
 		fi
 	    	(( i = $i +1 ))
 	done

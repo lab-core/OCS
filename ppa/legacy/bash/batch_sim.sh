@@ -55,7 +55,7 @@ do
 
 	        if [ $SLURM_ARRAY_TASK_ID -eq $i ]
 		then
-	    	python ../src/Learn_Sim.py --sims $sims --model $k --seed 5001 --store_sim 0 --var $var --N1 $N1 --s1 $s1 --N2 $N2 --s2 $s2 --adapter $adapter --P $P --I 8 --L 20 --kmin $kmin --kmax $P --pw $pw  --cnp 10 --co 0  --runs $runs  --scenarios $scen --stoch $stoch --um $um --learn_iter $li  --resume $cont --use_weight $w --lm $lm --time_limit $tl --new $new --vanilla $vanilla --gated $gated --evolve_expert 0 --mipgap $mg > ../Soutput/Soutput$mg$kmin$runs$new$s$pw$P$k$tl$scen$stoch.txt	
+	    	python ../Learn_Sim.py --sims $sims --model $k --seed 5001 --store_sim 0 --var $var --N1 $N1 --s1 $s1 --N2 $N2 --s2 $s2 --adapter $adapter --P $P --I 8 --L 20 --kmin $kmin --kmax $P --pw $pw  --cnp 10 --co 0  --runs $runs  --scenarios $scen --stoch $stoch --um $um --learn_iter $li  --resume $cont --use_weight $w --lm $lm --time_limit $tl --new $new --vanilla $vanilla --gated $gated --evolve_expert 0 --mipgap $mg > ../Soutput/Soutput$mg$kmin$runs$new$s$pw$P$k$tl$scen$stoch.txt	
 		fi
 	    	(( i = $i +1 ))
 	done

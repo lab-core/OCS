@@ -22,12 +22,12 @@ from typing import TYPE_CHECKING
 import numpy as np
 from udagger import Label, aggregate_votes, one_hot
 
-from ilco_adwords.env import SKIP, State, feasible_mask, sample_future_counts
-from ilco_adwords.market import Market
-from ilco_adwords.solver import solve_count_mip
+from udagger_adwords.env import SKIP, State, feasible_mask, sample_future_counts
+from udagger_adwords.market import Market
+from udagger_adwords.solver import solve_count_mip
 
 if TYPE_CHECKING:
-    from ilco_adwords.problem import AdwordsEpisode
+    from udagger_adwords.problem import AdwordsEpisode
 
 EXPERT_KINDS = ("greedy", "msvv", "full", "det", "agg", "saa")
 

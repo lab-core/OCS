@@ -1,109 +1,38 @@
-"""Adapters of the PPA simulator and experts to the ``udagger`` interfaces."""
+"""The physician-to-patient assignment problem as a ``udagger`` problem."""
 
 from __future__ import annotations
 
-import atexit
 import itertools
-import os
-import shutil
-import sys
-import tempfile
-from dataclasses import asdict
-from typing import Any
 
 import numpy as np
-from udagger import Label, aggregate_votes, one_hot
-from Learn_Module import IO_learning
-from OCS import AppointmentScheduler
-from utility import Config, build_config, parse_args
 
-# Expert scenario seeds of an episode: offset + 1000 * episode seed + j, with
-# j < 1000 the scenario index. The offset keeps them above every episode seed
-# (training seeds are 10**6 * (run + 1) + i, so below 10**12 for any run).
-EXPERT_SEED_OFFSET = 10**12
+from udagger_ppa.features import blocked, features
+from udagger_ppa.instance import Instance, make_scheduler
+from udagger_ppa.scheduler import AppointmentScheduler
+
 _EPISODE_IDS = itertools.count()
 
 
-def config_from_args(argv: list[str]) -> Config:
-    """Build a PPA configuration from options of the original scripts.
+class PPAEpisode:
+    """One booking horizon (``udagger.Episode`` interface).
+
+    Actions ``0..P-1`` assign the calling patient to a physician and ``P``
+    rejects the request. The objective (total cost) is minimised.
 
     Args:
-        argv: Options of ``utility.parse_args`` (e.g. ``["--stoch", "1"]``).
-
-    Returns:
-        The configuration of ``utility.build_config``.
-    """
-    saved = sys.argv
-    try:
-        sys.argv = [saved[0], *argv]
-        return build_config(parse_args())
-    finally:
-        sys.argv = saved
-
-
-def expert_name(config: Config) -> str:
-    """Name of the expert defined by a configuration."""
-    if config.stoch == 1:
-        return f"saa{config.scenarios}"
-    if config.new == 0:
-        return "full"
-    return "det" if config.scenarios == 1 else f"agg{config.scenarios}"
-
-
-class _Context:
-    """Simulator and learner of one process (built lazily, not pickled)."""
-
-    def __init__(self, config: Config) -> None:
-        """Build the simulator exactly as in ``Learn_Main.py``."""
-        p = config.ocs_param
-        if config.num_class != p["P"] + 1:
-            raise ValueError("only the full action space (--task full) is supported")
-        # The original classes write solver and instance files to a folder.
-        self.tmp = tempfile.mkdtemp(prefix="ppa_")
-        atexit.register(shutil.rmtree, self.tmp, ignore_errors=True)
-        self.sim = AppointmentScheduler(
-            n_patients1=p["N1"],
-            sigma1=p["sigma1"],
-            n_patients2=p["N2"],
-            sigma2=p["sigma2"],
-            n_phys=p["P"],
-            n_slots=p["I"],
-            k_max=p["k_max"],
-            k_min=p["k_min"],
-            c_miss_1=p["c_miss_1"],
-            c_miss_2=p["c_miss_2"],
-            c_overtime=p["co"],
-            c_np_per=p["cnp"],
-            physician_weights=p["physician_weights"],
-            release_cap=p["Rmax"],
-            cap_per_phys=p["L"],
-            time_limit=config.time_limit,
-            mipgap=config.mipgap,
-            var=p["var"],
-            seed=config.seed,
-            out_dir=self.tmp,
-            suffix=False,
-        )
-        self.sim.setup_solver()
-        self.learner = IO_learning(self.sim, asdict(config), folder=self.tmp)
-
-
-class PPAEpisode:
-    """One PPA episode (``udagger.Episode`` interface).
-
-    Actions ``0..P-1`` assign the patient to a physician and ``P`` rejects
-    the request. The objective (``total_cost``) is minimised.
+        sim: Simulator of the current process.
+        seed: Episode seed (as ``Learn_Sim.py``: ``set_seed(seed)``).
     """
 
-    def __init__(self, ctx: _Context, seed: int) -> None:
-        """Generate the instance of ``seed`` (as ``Learn_Sim.py``)."""
-        self.ctx = ctx
+    def __init__(self, sim: AppointmentScheduler, seed: int) -> None:
+        """Generate the requests of the episode and reset the simulator."""
+        self.sim = sim
         self.seed = seed
         self.uid = next(_EPISODE_IDS)
-        ctx.sim.set_seed(seed)
-        ctx.sim.generate_instance()
-        self.state, self._done = ctx.sim.reset_simulator()
-        self._cache: tuple[int, np.ndarray] | None = None
+        sim.set_seed(seed)
+        sim.generate_instance()
+        self.state, self._done = sim.reset_simulator()
+        self._x: tuple[int, np.ndarray] | None = None
         self.states: list[dict] = []
         self.actions: list[int] = []
         self.rewards: list[float] = []
@@ -119,24 +48,21 @@ class PPAEpisode:
         return self.state
 
     def features(self, state: dict) -> np.ndarray:
-        """Features of the original study (``IO_learning.get_feature_vector``)."""
-        if self._cache is None or self._cache[0] != id(state):
-            x = self.ctx.learner.get_feature_vector(state)
-            self._cache = (id(state), np.asarray(x, np.float32))
-        return self._cache[1]
+        """Features of a state (computed once per state)."""
+        if self._x is None or self._x[0] != id(state):
+            self._x = (id(state), features(state, self.sim))
+        return self._x[1]
 
     def mask(self, state: dict) -> np.ndarray:
-        """Feasible actions; the last feature block flags blocked actions."""
-        n = self.ctx.sim.P + 1
-        blocked = self.features(state)[-n:]
-        return blocked == 0
+        """Feasible actions (rejection is always feasible)."""
+        return np.array([b == 0 for b in blocked(state, self.sim.P)] + [True])
 
     def step(self, action: int) -> None:
-        """Assign or reject the current patient."""
+        """Assign or reject the calling patient."""
         self.states.append(self.state)
-        out = self.ctx.sim.step(int(action))
-        # The simulator returns (state, reward, done) on its early-termination
-        # branches and (state, reward, feasible, done) otherwise.
+        out = self.sim.step(int(action))
+        # The simulator returns (state, reward, done) when called on a
+        # finished episode and (state, reward, feasible, done) otherwise.
         if len(out) == 3:
             self.state, reward, self._done = out
             feasible = True
@@ -152,112 +78,61 @@ class PPAEpisode:
         return {"epoch_time": float(cur["score"]), "priority": int(cur["priority"])}
 
     def stats(self) -> dict[str, float]:
-        """Total cost (the objective) and rejection statistics."""
-        st = self.ctx.sim.collect_stats(
+        """Total cost (the objective), rejections and arrivals."""
+        st = self.sim.collect_stats(
             [*self.states, self.state], self.actions, self.rewards, self.feasibles
         )
-        keys = ("rejected_p1", "rejected_p2", "nonpref_assignments_total")
+        keys = (
+            "rejected_p1",
+            "rejected_p2",
+            "nonpref_assignments_total",
+            "total_arrivals_p1",
+            "total_arrivals_p2",
+        )
         return {"objective": float(st["total_cost"]), **{k: st[k] for k in keys}}
 
 
 class PPAProblem:
     """Factory of PPA episodes (``udagger.Problem`` interface).
 
-    The simulator is built lazily in every process, so that the problem can
+    The simulator is built lazily in each process, so that the problem can
     be sent to worker processes; a process runs one episode at a time.
 
     Args:
-        config: Configuration of the original scripts.
+        instance: Instance parameters.
     """
 
     maximize = False
 
-    def __init__(self, config: Config) -> None:
-        """Store the configuration."""
-        self.config = config
-        self.n_actions = config.num_class
-        self._ctx: _Context | None = None
+    def __init__(self, instance: Instance) -> None:
+        """Store the instance parameters."""
+        self.instance = instance
+        self.n_actions = instance.n_actions
+        self._sim: AppointmentScheduler | None = None
 
-    def __getstate__(self) -> dict[str, Any]:
-        """Pickle the configuration only."""
-        return {"config": self.config, "n_actions": self.n_actions, "_ctx": None}
-
-    @property
-    def ctx(self) -> _Context:
-        """Simulator and learner of the current process."""
-        if self._ctx is None:
-            self._ctx = _Context(self.config)
-        return self._ctx
+    def __getstate__(self) -> dict:
+        """Pickle the parameters only."""
+        return {**self.__dict__, "_sim": None}
 
     def episode(self, seed: int) -> PPAEpisode:
         """Create the episode of a seed."""
-        return PPAEpisode(self.ctx, seed)
+        if self._sim is None:
+            self._sim = make_scheduler(self.instance, seed)
+        return PPAEpisode(self._sim, seed)
 
 
-class PPAExpert:
-    """Optimisation expert of the original study (``udagger.Expert``).
+def offline_optimum(
+    instance: Instance, seed: int, time_limit: float = 300.0
+) -> tuple[float, float | None]:
+    """Hindsight optimum of an episode (all requests known in advance).
 
-    The kind of expert is set by the configuration: ``stoch = 1`` is the
-    two-stage expert, ``new = 0`` the full-information expert, and otherwise
-    one (deterministic) or several (aggregated) sampled scenarios. As in the
-    original scripts, the executed action is drawn from the votes.
-
-    Args:
-        config: Configuration of the expert (``--stoch``, ``--new``,
-            ``--scenarios``, ``--mipgap``, ``--time_limit``).
+    Returns:
+        The optimal (or best found) cost and the final MIP gap in %.
     """
-
-    def __init__(self, config: Config) -> None:
-        """Store the configuration."""
-        self.config = config
-        self.name = expert_name(config)
-        self._episode: tuple[int, int] | None = None
-
-    def __call__(
-        self, episode: PPAEpisode, state: dict, rng: np.random.Generator
-    ) -> Label:
-        """Solve the expert models at a state of an episode."""
-        learner = episode.ctx.learner
-        key = (os.getpid(), episode.uid)
-        if self._episode != key:
-            # New episode: scenario models seeded from the episode seed.
-            learner.new = self.config.new
-            learner.stoch = self.config.stoch
-            learner.num_scenarios = self.config.scenarios
-            learner.set_scenarios(
-                EXPERT_SEED_OFFSET + 1000 * episode.seed, asdict(self.config)
-            )
-            self._episode = key
-        votes, gap, _, sol_time = learner.get_expert_action(state, self.name)
-        action, dist = aggregate_votes(
-            [int(v) for v in votes], self.config.num_class, rng, sample=True
-        )
-        return Label(action, dist, float(sol_time or 0.0), float(gap or 0.0) / 100)
-
-
-class PPAGreedy:
-    """Myopic rule: preferred physician if possible, else a random eligible one.
-
-    The executed action is drawn by the simulator, as in the original study;
-    the training target is the rule itself (uniform over the eligible
-    physicians when the preferred one is unavailable).
-    """
-
-    name = "greedy"
-
-    def __call__(
-        self, episode: PPAEpisode, state: dict, rng: np.random.Generator
-    ) -> Label:
-        """Return the greedy action and the distribution of the rule."""
-        sim = episode.ctx.sim
-        action = int(sim.select_physician(state))
-        cur = state["current_patient"]
-        avail = list(cur.get("available_phys") or [1] * sim.P)
-        elig = list(cur.get("eligible_phys") or [1] * sim.P)
-        pref = int(cur.get("preferred_phys", 0))
-        ok = [p for p in range(sim.P) if avail[p] == 1 and elig[p] == 1]
-        if pref in ok or not ok:
-            return Label(action, one_hot(action, sim.P + 1))
-        dist = np.zeros(sim.P + 1)
-        dist[ok] = 1.0 / len(ok)
-        return Label(action, dist)
+    sim = make_scheduler(instance, seed, time_limit=time_limit, mipgap=0.0)
+    sim.set_seed(seed)
+    sim.generate_instance()
+    sim.build_model(sim.patients)
+    _, _, gap, _ = sim.solve(tee=False)
+    _, cost = sim.extract_solution(sim.patients)
+    return float(cost), gap

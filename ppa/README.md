@@ -42,58 +42,86 @@ This problem can be modeled as a **stochastic dynamic program (SDP)**:
 The objective is to choose decisions over the booking horizon to **minimize the total expected penalties** from patient rejections and non-preferred assignments, subject to physician capacity constraints.
 
 
-## Getting Started
-To get started with our algorithm, ensure you have Python 3.11.4 and Gurobi Optimizer Version 12.0 installed. 
- 
-Please install the requirements using 
+## Layout
 
-`pip install -r requirements.txt`
+| Path | Content |
+|---|---|
+| `udagger_ppa/instance.py` | instance parameters, model construction and episode seeds |
+| `udagger_ppa/scheduler.py` | simulator and deterministic MIP (Pyomo + Gurobi) |
+| `udagger_ppa/stochastic.py` | two-stage stochastic MIP |
+| `udagger_ppa/features.py` | state features of the learned policy |
+| `udagger_ppa/experts.py` | greedy, full-information, deterministic, aggregated, two-stage |
+| `udagger_ppa/problem.py` | the PPA problem and its episodes for `udagger`, hindsight optimum |
+| `udagger_ppa/cli.py` | `hindsight`, `expert` and `learn` commands (learning with `udagger`) |
+| `slurm/make_grid.py` | experiment grids (run with the shared `../slurm/array.sh`) |
+| `tests/` | unit tests, including equivalence with the original code |
+| `legacy/` | original scripts of the study (see below) |
 
+## Installation
 
-All commands below are run from `ppa/src/`; the SLURM scripts in
-`ppa/bash/` are submitted from `ppa/bash/`.
+Python 3.11+ and a Gurobi licence are required. The learning code is the
+`udagger` package at the repository root:
 
-1. **Train :** Set up and train the pipeline with your preferred settings using:
-   
-   `python Learn_Main.py`
+```bash
+pip install -e ..            # udagger
+pip install -r requirements.txt
+PYTHONPATH=$PWD pytest -q tests
+```
 
-2. **Evaluate Pipeline:** Assess the resulting policy's performance in terms of costs and inference time:
+Without installing `udagger`, use `PYTHONPATH=$PWD/..:$PWD` instead. The
+command line, options and output files are the same as in the AdWords example
+(`../adwords`).
 
-   `python Learn_Sim.py`
+## Reproducing the experiments
 
+All commands are run from `ppa/`. Results go to `--out`, or to `$PPA_OUT` if
+`--out` is not given. Episode `n` of the test and validation sets has seed
+`5001 + n` and `6001 + n`, as in the original evaluation.
 
-# Running the Code to learn policies
-The following code will run PPA to execute 100 DAgger iterations for the Two-stage Stochastic expert with 10 scenarios, with a stopping criterion of 20 seconds and 2% MIPgap.
+```bash
+# Hindsight optimum on the validation and test episodes.
+python -m udagger_ppa.cli --workers 32 hindsight
+# One expert used online on the test episodes.
+python -m udagger_ppa.cli --workers 16 expert --expert saa --scenarios 30 --gap 0.002
+# One learning run.
+python -m udagger_ppa.cli --workers 10 learn --expert saa --scenarios 5 \
+    --seed 0 --mode dagger
+```
 
-`python Learn_Main.py  --N 100 --s 8 --P 4 --I 8 --L 20  --kmin 1 --kmax 4 --pw 1  --cnp 10 --co 0  --runs 10 --new 1  --scenarios 5 --stoch 1 --um 1 --learn_iter 100   --time_limit 20  --mipgap 0.02` 
-# Running the Code to simulate learnt policies
-The following code will simulate the first model learnt for a total of 100 episodes.
+To run the full study on Rorqual, from the repository root with the shared
+job script (results in `$UDAGGER_OUT/ppa`, by default `~/scratch/udagger/ppa`):
 
-`python Learn_Sim.py --sims 1000 --model 1 --store_sim 0 --N 100 --s 8 --P 4 --I 8 --L 20 --kmin 1 --kmax 4 --pw 1  --cnp 10 --co 0  --runs 10 --new 1  --scenarios 5 --stoch 1 --um 1 --learn_iter 100  --time_limit 20 --mipgap 0.02` 
+```bash
+python ppa/slurm/make_grid.py
+sbatch --array=1-14 --time=3-00:00:00 slurm/array.sh ppa ppa/slurm/expert_grid.txt
+sbatch --array=1-57 --time=7-00:00:00 slurm/array.sh ppa ppa/slurm/learn_grid.txt
+```
 
-Additionally, there are Slurm files in bash folder to run multiple models under the same settings.
+## Original scripts (`legacy/`)
 
+`legacy/` keeps the scripts of the original study, which produced the
+published results: `Learn_Main.py` (DAgger and data collection), `NN.py`
+(network and training), `Learn_Sim.py` and `Evaluate.py` (evaluation),
+`bash/` (original job scripts), and `slurm/` + `analysis/` (the CPAIOR rerun:
+`slurm/run.sh`, `slurm/make_grid.py`, `analysis/make_results.py`). They
+import the simulator and the MIPs from `udagger_ppa` through the
+compatibility modules `legacy/OCS.py` and `legacy/SOCS.py`, and are run from
+`legacy/`, e.g.:
+
+```bash
+cd ppa/legacy
+python Learn_Main.py --runs 10 --new 1 --scenarios 5 --stoch 1 --um 1 \
+    --learn_iter 400 --time_limit 30 --mipgap 0.02
+python Learn_Sim.py --sims 1000 --model 399 --new 1 --scenarios 5 --stoch 1 \
+    --um 1 --learn_iter 400 --runs 10 --time_limit 30 --mipgap 0.02
+```
+
+`tests/test_udagger_ppa.py` checks that the features and the expert decisions
+of `udagger_ppa` are identical to those of the original `IO_learning` on the
+same states and seeds.
 
 ## Citation
 
 If you use our repository in your research, please cite the following paper:
 
 > [Imitation Learning for Combinatorial Optimisation under Uncertainty](https://arxiv.org/abs/) - Prakash Gawas, Antoine Legrain, Louis-Martin Rousseau (2024)
-
-
-
-## Learning with the `udagger` package
-
-`udagger_ppa/` adapts the simulator, the features and the experts of `src/`
-(used unchanged) to the problem-independent package at the repository root.
-PPA policies can then be learned with the same code as the AdWords example:
-
-```bash
-cd ppa
-PYTHONPATH=$PWD/..:$PWD python -m udagger_ppa --mode dagger --episodes 4000 \
-    --workers 10 --out results/saa5 -- --stoch 1 --new 1 --scenarios 5
-```
-
-Options after `--` are those of `src/utility.py`. The results reported in the
-papers come from the original scripts (`src/Learn_Main.py`, `src/Evaluate.py`
-and `slurm/`), which are kept for reproducibility.
