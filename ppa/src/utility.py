@@ -44,6 +44,8 @@ class Config:
     target_mode:str = "soft"
     static_data:int = 0
     evolve_expert:int = 0
+    workers:int = 10  # parallel episodes per iteration (does not change results)
+    seed_in_name:int = 0  # add the training seed to the output folder name
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Appointment Scheduling DAgger Trainer")
@@ -66,6 +68,8 @@ def parse_args():
     parser.add_argument('--model', type = int,  default=1, help="Which model to run")
     parser.add_argument('--sims', type = int,  default=1000, help="Number of simulations")
     parser.add_argument('--seed', type = int,  default=6001, help="seed")
+    parser.add_argument('--workers', type=int, default=10, help="parallel episodes per iteration")
+    parser.add_argument('--seed_in_name', type=int, default=0, help="add the seed to the output folder name")
     parser.add_argument('--store_sim', type = int,  default=0, help="store sime trace")
     parser.add_argument('--static_data', type = int,  default=0, help="use static data")
 
@@ -127,7 +131,9 @@ def build_config(args) -> Config:
         adapter=args.adapter,
         sims=args.sims,
         static_data=args.static_data,
-        evolve_expert=args.evolve_expert
+        evolve_expert=args.evolve_expert,
+        workers=args.workers,
+        seed_in_name=args.seed_in_name
     )
 
 def setup_logging(output_dir: str):
