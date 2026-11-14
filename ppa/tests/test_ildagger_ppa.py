@@ -1,4 +1,4 @@
-"""Tests of the PPA adapter to ``ildagger`` (need Pyomo and Gurobi)."""
+"""Tests of the PPA adapter to ``udagger`` (need Pyomo and Gurobi)."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ import pytest
 pytest.importorskip("pyomo")
 pytest.importorskip("gurobipy")
 
-from ildagger import run_episode, stack  # noqa: E402  (after the skips)
+from udagger import run_episode, stack  # noqa: E402  (after the skips)
 
-from ildagger_ppa.problem import (  # noqa: E402  (after the skips)
+from udagger_ppa.problem import (  # noqa: E402  (after the skips)
     PPAExpert,
     PPAGreedy,
     PPAProblem,

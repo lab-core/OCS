@@ -1,8 +1,8 @@
-"""The physician-to-patient assignment problem as an ``ildagger`` example.
+"""The physician-to-patient assignment problem as a ``udagger`` example.
 
 The simulator, the state features and the optimisation experts are those of
 the original study (``ppa/src``), used unchanged; this package only adapts
-them to the ``ildagger`` interfaces. The original modules use flat imports
+them to the ``udagger`` interfaces. The original modules use flat imports
 (``from OCS import ...``), so ``ppa/src`` is added to the import path.
 """
 

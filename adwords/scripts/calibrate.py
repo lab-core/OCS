@@ -7,7 +7,7 @@ import multiprocessing as mp
 import sys
 
 import numpy as np
-from ildagger import run_episode
+from udagger import run_episode
 
 from ilco_adwords.experts import Expert
 from ilco_adwords.market import make_market, sample_episode

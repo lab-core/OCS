@@ -24,9 +24,9 @@ from typing import Literal
 
 import numpy as np
 
-from ildagger.policy import NumpyPolicy, train_policy
-from ildagger.problem import Expert
-from ildagger.rollout import EpisodeResult, Runner, merge, stack
+from udagger.policy import NumpyPolicy, train_policy
+from udagger.problem import Expert
+from udagger.rollout import EpisodeResult, Runner, merge, stack
 
 
 @dataclass

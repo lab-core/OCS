@@ -1,4 +1,4 @@
-"""The stochastic AdWords problem as an ``ildagger`` problem."""
+"""The stochastic AdWords problem as a ``udagger`` problem."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def features(market: Market, state: State) -> np.ndarray:
 
 
 class AdwordsEpisode:
-    """One AdWords episode (``ildagger.Episode`` interface).
+    """One AdWords episode (``udagger.Episode`` interface).
 
     Args:
         market: The market.
@@ -98,7 +98,7 @@ class AdwordsEpisode:
 
 @dataclass
 class AdwordsProblem:
-    """Factory of AdWords episodes (``ildagger.Problem`` interface).
+    """Factory of AdWords episodes (``udagger.Problem`` interface).
 
     Attributes:
         market: The market.

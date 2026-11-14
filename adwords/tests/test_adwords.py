@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from ildagger import NumpyPolicy, run_episode, stack, train_policy
+from udagger import NumpyPolicy, run_episode, stack, train_policy
 
 from ilco_adwords.env import (
     Simulator,

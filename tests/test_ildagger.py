@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from ildagger import (
+from udagger import (
     Label,
     LearnConfig,
     Runner,

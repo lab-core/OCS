@@ -14,8 +14,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from ildagger.policy import NumpyPolicy
-from ildagger.problem import Expert, Problem
+from udagger.policy import NumpyPolicy
+from udagger.problem import Expert, Problem
 
 # Salts of the per-episode random streams: one for the beta-mixing and the
 # expert, one for the learned policy, so that test episodes stay paired across

@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ildagger"
+name = "udagger"
 version = "0.1.0"
 description = "Imitation learning (one-shot cloning and DAgger) for online combinatorial optimisation under uncertainty"
 readme = "README.md"
@@ -14,7 +14,7 @@ dependencies = ["numpy", "torch"]
 test = ["pytest"]
 
 [tool.setuptools]
-packages = ["ildagger"]
+packages = ["udagger"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

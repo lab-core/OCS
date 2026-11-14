@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
-from ildagger import Label, aggregate_votes, one_hot
+from udagger import Label, aggregate_votes, one_hot
 
 from ilco_adwords.env import SKIP, State, feasible_mask, sample_future_counts
 from ilco_adwords.market import Market
@@ -72,7 +72,7 @@ class Expert:
     def __call__(
         self, episode: AdwordsEpisode, state: State, rng: np.random.Generator
     ) -> Label:
-        """Label a state of an episode (``ildagger.Expert`` interface).
+        """Label a state of an episode (``udagger.Expert`` interface).
 
         The full-information expert reads the realised future of the episode.
         """

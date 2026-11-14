@@ -1,8 +1,8 @@
-"""Learn a PPA policy with ``ildagger`` (one-shot cloning or DAgger).
+"""Learn a PPA policy with ``udagger`` (one-shot cloning or DAgger).
 
 Usage (from ``ppa/``, with the repository root on ``PYTHONPATH``)::
 
-    python -m ildagger_ppa --mode dagger --episodes 4000 --workers 10 \\
+    python -m udagger_ppa --mode dagger --episodes 4000 --workers 10 \\
         --out results/saa5 -- --stoch 1 --new 1 --scenarios 5
 
 Options after ``--`` are those of the original scripts (``utility.py``) and
@@ -21,9 +21,9 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from ildagger import EpisodeResult, LearnConfig, Runner, learn
+from udagger import EpisodeResult, LearnConfig, Runner, learn
 
-from ildagger_ppa.problem import (
+from udagger_ppa.problem import (
     PPAExpert,
     PPAGreedy,
     PPAProblem,

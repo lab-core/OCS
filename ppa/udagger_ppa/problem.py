@@ -1,4 +1,4 @@
-"""Adapters of the PPA simulator and experts to the ``ildagger`` interfaces."""
+"""Adapters of the PPA simulator and experts to the ``udagger`` interfaces."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from dataclasses import asdict
 from typing import Any
 
 import numpy as np
-from ildagger import Label, aggregate_votes, one_hot
+from udagger import Label, aggregate_votes, one_hot
 from Learn_Module import IO_learning
 from OCS import AppointmentScheduler
 from utility import Config, build_config, parse_args
@@ -82,7 +82,7 @@ class _Context:
 
 
 class PPAEpisode:
-    """One PPA episode (``ildagger.Episode`` interface).
+    """One PPA episode (``udagger.Episode`` interface).
 
     Actions ``0..P-1`` assign the patient to a physician and ``P`` rejects
     the request. The objective (``total_cost``) is minimised.
@@ -143,7 +143,7 @@ class PPAEpisode:
 
 
 class PPAProblem:
-    """Factory of PPA episodes (``ildagger.Problem`` interface).
+    """Factory of PPA episodes (``udagger.Problem`` interface).
 
     The simulator is built lazily in every process, so that the problem can
     be sent to worker processes; a process runs one episode at a time.
@@ -177,7 +177,7 @@ class PPAProblem:
 
 
 class PPAExpert:
-    """Optimisation expert of the original study (``ildagger.Expert``).
+    """Optimisation expert of the original study (``udagger.Expert``).
 
     The kind of expert is set by the configuration: ``stoch = 1`` is the
     two-stage expert, ``new = 0`` the full-information expert, and otherwise

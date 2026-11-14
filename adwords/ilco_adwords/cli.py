@@ -23,7 +23,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from ildagger import EpisodeResult, LearnConfig, NumpyPolicy, Runner, learn
+from udagger import EpisodeResult, LearnConfig, NumpyPolicy, Runner, learn
 
 from ilco_adwords.experts import EXPERT_KINDS, Expert
 from ilco_adwords.market import Market, make_market, sample_episode, split_seeds
