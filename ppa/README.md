@@ -80,3 +80,20 @@ If you use our repository in your research, please cite the following paper:
 
 > [Imitation Learning for Combinatorial Optimisation under Uncertainty](https://arxiv.org/abs/) - Prakash Gawas, Antoine Legrain, Louis-Martin Rousseau (2024)
 
+
+
+## Learning with the `ildagger` package
+
+`ildagger_ppa/` adapts the simulator, the features and the experts of `src/`
+(used unchanged) to the problem-independent package at the repository root.
+PPA policies can then be learned with the same code as the AdWords example:
+
+```bash
+cd ppa
+PYTHONPATH=$PWD/..:$PWD python -m ildagger_ppa --mode dagger --episodes 4000 \
+    --workers 10 --out results/saa5 -- --stoch 1 --new 1 --scenarios 5
+```
+
+Options after `--` are those of `src/utility.py`. The results reported in the
+papers come from the original scripts (`src/Learn_Main.py`, `src/Evaluate.py`
+and `slurm/`), which are kept for reproducibility.

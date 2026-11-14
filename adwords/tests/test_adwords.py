@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from ildagger import NumpyPolicy, run_episode, stack, train_policy
 
 from ilco_adwords.env import (
     Simulator,
@@ -20,8 +21,7 @@ from ilco_adwords.market import (
     make_market,
     sample_episode,
 )
-from ilco_adwords.policy import NumpyPolicy, features, train_policy
-from ilco_adwords.rollout import run_episode
+from ilco_adwords.problem import AdwordsProblem, features
 from ilco_adwords.solver import offline_optimum, solve_count_mip
 
 
@@ -70,9 +70,9 @@ def test_hand_made_instance() -> None:
     assert offline_optimum(market, np.array([1, 1])) == pytest.approx(12.0)
     sim = Simulator(market, ep)
     state = sim.state()
-    greedy = Expert("greedy")(market, state, np.random.default_rng(0))
+    greedy = Expert("greedy").decide(market, state, np.random.default_rng(0))
     assert greedy.action == 1
-    full = Expert("full")(
+    full = Expert("full").decide(
         market, state, np.random.default_rng(0), sim.true_future_counts()
     )
     assert full.action == 2
@@ -84,7 +84,7 @@ def test_hindsight_dominates_online(market: Market) -> None:
         ep = sample_episode(market, np.random.default_rng(seed))
         opt = offline_optimum(market, np.bincount(ep.types, minlength=market.n_types))
         for kind, k in (("greedy", 1), ("msvv", 1), ("full", 1), ("saa", 3)):
-            rev = run_episode(market, seed, Expert(kind, k)).revenue
+            rev = run_episode(AdwordsProblem(market), seed, Expert(kind, k)).objective
             assert rev <= opt + 1e-6
             if kind == "full":
                 assert rev == pytest.approx(opt)
@@ -116,10 +116,8 @@ def test_saa_action_feasible(market: Market) -> None:
 
 def test_policy_learns_greedy(market: Market) -> None:
     """A policy cloned from greedy reproduces most greedy actions."""
-    data = [run_episode(market, s, Expert("greedy"), collect=True) for s in range(30)]
-    x = np.concatenate([d.x for d in data])
-    y = np.concatenate([d.target for d in data])
-    m = np.concatenate([d.mask for d in data])
+    data = _greedy_labels(market, 30)
+    x, y, m = data["x"], data["target"], data["mask"]
     policy, stats = train_policy(x, y, m, max_epochs=40)
     assert isinstance(policy, NumpyPolicy)
     assert stats.val_acc > 0.9
@@ -129,17 +127,17 @@ def test_policy_learns_greedy(market: Market) -> None:
 
 def test_sampling_policy_and_warm_start(market: Market) -> None:
     """Sampled actions are feasible and paired; warm start keeps the weights."""
-    data = [run_episode(market, s, Expert("greedy"), collect=True) for s in range(5)]
-    x = np.concatenate([d.x for d in data])
-    y = np.concatenate([d.target for d in data])
-    m = np.concatenate([d.mask for d in data])
+    data = _greedy_labels(market, 5)
+    x, y, m = data["x"], data["target"], data["mask"]
     policy, _ = train_policy(x, y, m, max_epochs=2)
     sampler = policy.with_sampling(True)
-    first = run_episode(market, 11, policy=sampler)
-    again = run_episode(market, 11, policy=sampler)
-    assert first.revenue == again.revenue
+    problem = AdwordsProblem(market)
+    first = run_episode(problem, 11, policy=sampler)
+    again = run_episode(problem, 11, policy=sampler)
+    assert first.objective == again.objective
+    state = Simulator(market, _episode(market)).state()
     with pytest.raises(ValueError):
-        sampler.act(market, Simulator(market, _episode(market)).state())
+        sampler.act(features(market, state), feasible_mask(market, state))
     # Zero epochs of training returns the initial weights unchanged.
     warm, _ = train_policy(x, y, m, max_epochs=0, init=policy)
     for (w0, b0), (w1, b1) in zip(policy.weights, warm.weights, strict=True):
@@ -152,7 +150,7 @@ def test_aggregated_expert_samples_votes(market: Market) -> None:
     sim = Simulator(market, _episode(market))
     state = sim.state()
     for vote in (True, False):
-        label = Expert("agg", n_scenarios=3, sample_vote=vote)(
+        label = Expert("agg", n_scenarios=3, sample_vote=vote).decide(
             market, state, np.random.default_rng(0)
         )
         assert label.dist[label.action] > 0
@@ -161,3 +159,10 @@ def test_aggregated_expert_samples_votes(market: Market) -> None:
 
 def _episode(market: Market) -> Episode:
     return sample_episode(market, np.random.default_rng(5))
+
+
+def _greedy_labels(market: Market, n: int) -> dict[str, np.ndarray]:
+    problem = AdwordsProblem(market)
+    return stack(
+        [run_episode(problem, s, Expert("greedy"), collect=True) for s in range(n)]
+    )

@@ -7,10 +7,11 @@ import multiprocessing as mp
 import sys
 
 import numpy as np
+from ildagger import run_episode
 
 from ilco_adwords.experts import Expert
 from ilco_adwords.market import make_market, sample_episode
-from ilco_adwords.rollout import run_episode
+from ilco_adwords.problem import AdwordsProblem
 from ilco_adwords.solver import offline_optimum
 
 # Episodes used only for calibration (test, valid and train start at 1e6, 2e6
@@ -26,7 +27,7 @@ def task(args: tuple) -> tuple:
     opt = offline_optimum(m, np.bincount(ep.types, minlength=m.n_types))
     out = [opt]
     for kind, k in (("greedy", 1), ("msvv", 1), ("det", 1), ("agg", 10), ("saa", 10)):
-        out.append(run_episode(m, seed, Expert(kind, k)).revenue)
+        out.append(run_episode(AdwordsProblem(m), seed, Expert(kind, k)).objective)
     return out
 
 

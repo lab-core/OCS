@@ -156,7 +156,10 @@ def load(results: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
                     "mode": meta["mode"],
                     "seed": meta["seed"],
                     "episodes": row["episodes"],
-                    "val_regret": 100.0 * (1.0 - row["val_revenue"] / opt_val),
+                    "val_regret": 100.0
+                    * (
+                        1.0 - row.get("val_objective", row.get("val_revenue")) / opt_val
+                    ),
                     "label_hours": row["label_seconds"] / 3600.0,
                 }
             )

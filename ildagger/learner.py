@@ -1,0 +1,210 @@
+"""Imitation learning loops: one-shot behavioural cloning and DAgger.
+
+Both modes label states with an expert and train the same policy:
+
+* one-shot: the expert controls every training episode (``beta = 1``);
+  optionally, policies are also trained on the first ``sizes`` episodes;
+* DAgger: episodes are collected in iterations of ``per_iteration``
+  episodes; at iteration ``i`` the expert acts with probability
+  ``beta_decay ** i`` (1 at the first iteration) and the learned policy
+  otherwise, every visited state is labelled, and the policy is retrained on
+  the aggregated data every ``retrain_every`` iterations.
+
+Every trained policy is scored on the validation episodes and the best one
+is returned.
+"""
+
+from __future__ import annotations
+
+import json
+import time
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
+from typing import Literal
+
+import numpy as np
+
+from ildagger.policy import NumpyPolicy, train_policy
+from ildagger.problem import Expert
+from ildagger.rollout import EpisodeResult, Runner, merge, stack
+
+
+@dataclass
+class LearnConfig:
+    """Settings of a learning run.
+
+    Attributes:
+        mode: ``"oneshot"`` or ``"dagger"``.
+        seed: Seed of the network training (replicate index).
+        sizes: One-shot only: also train on these first numbers of episodes.
+        per_iteration: DAgger: episodes per iteration.
+        retrain_every: DAgger: iterations between two retrainings.
+        beta_decay: DAgger: decay of the probability that the expert acts.
+        warm_start: DAgger: start each training from the previous weights.
+        policy_action: ``"sample"`` to draw actions from the learned
+            distribution, ``"mode"`` to take the most likely action.
+        epochs: Training epochs.
+        batch_size: Mini-batch size.
+        patience: Early-stopping patience (None: all epochs).
+        val_fraction: Fraction of the samples held out to select the epoch.
+        hidden: Width of the hidden layers.
+        depth: Number of hidden layers.
+        lr: Adam learning rate.
+    """
+
+    mode: Literal["oneshot", "dagger"] = "dagger"
+    seed: int = 0
+    sizes: list[int] = field(default_factory=list)
+    per_iteration: int = 10
+    retrain_every: int = 1
+    beta_decay: float = 0.8
+    warm_start: bool = True
+    policy_action: Literal["sample", "mode"] = "sample"
+    epochs: int = 100
+    batch_size: int = 256
+    patience: int | None = None
+    val_fraction: float = 0.2
+    hidden: int = 128
+    depth: int = 2
+    lr: float = 1e-3
+
+
+@dataclass
+class LearnResult:
+    """Outcome of a learning run.
+
+    Attributes:
+        policy: Best policy on validation.
+        best: Learning-curve row of the best policy.
+        curve: One row per trained policy.
+        data: All labelled samples.
+        label_seconds: Total expert labelling time.
+    """
+
+    policy: NumpyPolicy
+    best: dict
+    curve: list[dict]
+    data: dict[str, np.ndarray]
+    label_seconds: float
+
+
+def mean_objective(results: list[EpisodeResult]) -> float:
+    """Average objective of a list of episodes."""
+    return float(np.mean([r.objective for r in results]))
+
+
+def _train(
+    cfg: LearnConfig,
+    data: dict[str, np.ndarray],
+    seed: int,
+    init: NumpyPolicy | None = None,
+) -> tuple[NumpyPolicy, dict]:
+    policy, stats = train_policy(
+        data["x"],
+        data["target"],
+        data["mask"],
+        seed=seed,
+        hidden=cfg.hidden,
+        depth=cfg.depth,
+        lr=cfg.lr,
+        batch_size=cfg.batch_size,
+        max_epochs=cfg.epochs,
+        patience=cfg.patience,
+        val_fraction=cfg.val_fraction,
+        init=init,
+    )
+    return policy.with_sampling(cfg.policy_action == "sample"), asdict(stats)
+
+
+def learn(
+    runner: Runner,
+    expert: Expert,
+    cfg: LearnConfig,
+    train_seeds: list[int],
+    valid_seeds: list[int],
+    log: Callable[[str], None] = print,
+) -> LearnResult:
+    """Learn a policy from an expert.
+
+    Args:
+        runner: Runner of the problem.
+        expert: Expert providing the labels.
+        cfg: Settings of the run.
+        train_seeds: Seeds of the training episodes (their number is the
+            labelling budget).
+        valid_seeds: Seeds of the validation episodes.
+        log: Called with one JSON line per trained policy.
+
+    Returns:
+        The best policy on validation and the learning history.
+
+    Raises:
+        ValueError: If the DAgger budget is not a multiple of
+            ``per_iteration``.
+    """
+    sign = 1.0 if runner.problem.maximize else -1.0
+    start = time.perf_counter()
+    label_seconds = 0.0
+    curve: list[dict] = []
+    data: dict[str, np.ndarray] = {}
+    best: dict = {"score": -np.inf}
+
+    def checkpoint(policy: NumpyPolicy, it: int, episodes: int, stats: dict) -> None:
+        nonlocal best
+        val = mean_objective(runner.run(valid_seeds, policy=policy))
+        row = {
+            "iteration": it,
+            "episodes": episodes,
+            "samples": int(data["x"].shape[0]),
+            "label_seconds": label_seconds,
+            "wall_seconds": time.perf_counter() - start,
+            "val_objective": val,
+            **stats,
+        }
+        curve.append(row)
+        log(json.dumps(row))
+        if sign * val > best["score"]:
+            best = {"score": sign * val, "policy": policy, "row": row}
+
+    n_episodes = len(train_seeds)
+    if cfg.mode == "oneshot":
+        results = runner.run(train_seeds, expert=expert, collect=True)
+        label_seconds = sum(r.solve_time for r in results)
+        data_all = stack(results)
+        sizes = sorted({int(s) for s in cfg.sizes if s <= n_episodes} | {n_episodes})
+        for size in sizes:
+            keep = np.isin(data_all["episode"], train_seeds[:size])
+            data = {k: v[keep] for k, v in data_all.items()}
+            policy, stats = _train(cfg, data, cfg.seed)
+            checkpoint(policy, 0, size, stats)
+        data = data_all
+    else:
+        per_it = cfg.per_iteration
+        if n_episodes % per_it:
+            raise ValueError(
+                "the number of episodes must be a multiple of per_iteration"
+            )
+        n_it = n_episodes // per_it
+        policy = None
+        for it in range(n_it):
+            beta = 1.0 if it == 0 else cfg.beta_decay**it
+            seeds = train_seeds[it * per_it : (it + 1) * per_it]
+            results = runner.run(
+                seeds, expert=expert, policy=policy, beta=beta, collect=True
+            )
+            label_seconds += sum(r.solve_time for r in results)
+            data = merge(data, stack(results))
+            last = it == n_it - 1
+            if (it + 1) % cfg.retrain_every == 0 or it == 0 or last:
+                init = policy if cfg.warm_start else None
+                train_seed = cfg.seed * 100_000 + it
+                policy, stats = _train(cfg, data, train_seed, init)
+                checkpoint(policy, it + 1, (it + 1) * per_it, stats)
+
+    return LearnResult(
+        policy=best["policy"],
+        best=best["row"],
+        curve=curve,
+        data=data,
+        label_seconds=label_seconds,
+    )

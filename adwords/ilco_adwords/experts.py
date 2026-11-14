@@ -17,37 +17,19 @@ The experts follow the taxonomy of the paper (treatment of uncertainty):
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
+from ildagger import Label, aggregate_votes, one_hot
 
 from ilco_adwords.env import SKIP, State, feasible_mask, sample_future_counts
 from ilco_adwords.market import Market
 from ilco_adwords.solver import solve_count_mip
 
+if TYPE_CHECKING:
+    from ilco_adwords.problem import AdwordsEpisode
+
 EXPERT_KINDS = ("greedy", "msvv", "full", "det", "agg", "saa")
-
-
-@dataclass
-class Label:
-    """Output of an expert query.
-
-    Attributes:
-        action: Action recommended by the expert.
-        dist: Distribution over actions used as (soft) training target.
-        solve_time: Seconds spent solving optimisation models.
-        gap: Largest relative MIP gap of the solved models.
-    """
-
-    action: int
-    dist: np.ndarray
-    solve_time: float = 0.0
-    gap: float = 0.0
-
-
-def _one_hot(action: int, size: int) -> np.ndarray:
-    dist = np.zeros(size)
-    dist[action] = 1.0
-    return dist
 
 
 def _rel_gap(obj: float, bound: float) -> float:
@@ -88,6 +70,16 @@ class Expert:
         return self.kind
 
     def __call__(
+        self, episode: AdwordsEpisode, state: State, rng: np.random.Generator
+    ) -> Label:
+        """Label a state of an episode (``ildagger.Expert`` interface).
+
+        The full-information expert reads the realised future of the episode.
+        """
+        future = episode.sim.true_future_counts() if self.kind == "full" else None
+        return self.decide(episode.market, state, rng, future)
+
+    def decide(
         self,
         market: Market,
         state: State,
@@ -111,18 +103,18 @@ class Expert:
         size = market.n_adv + 1
         mask = feasible_mask(market, state)
         if not mask[1:].any():
-            return Label(SKIP, _one_hot(SKIP, size))
+            return Label(SKIP, one_hot(SKIP, size))
         bid = market.bids[:, state.query].astype(float)
 
         if self.kind == "greedy":
             score = np.where(mask[1:], bid, -np.inf)
             action = int(np.argmax(score)) + 1
-            return Label(action, _one_hot(action, size))
+            return Label(action, one_hot(action, size))
         if self.kind == "msvv":
             spent = 1.0 - state.budgets / market.budgets
             score = np.where(mask[1:], bid * (1.0 - np.exp(spent - 1.0)), -np.inf)
             action = int(np.argmax(score)) + 1
-            return Label(action, _one_hot(action, size))
+            return Label(action, one_hot(action, size))
 
         if self.kind == "full":
             if true_future is None:
@@ -134,7 +126,7 @@ class Expert:
             counts = sample_future_counts(market, state, self.n_scenarios, rng)
             scenario_sets = [counts[s : s + 1] for s in range(counts.shape[0])]
 
-        dist = np.zeros(size)
+        votes = []
         solve_time = 0.0
         gap = 0.0
         for scenarios in scenario_sets:
@@ -146,13 +138,10 @@ class Expert:
                 mip_gap=self.mip_gap,
                 time_limit=self.time_limit,
             )
-            dist[res.action] += 1.0
+            votes.append(res.action)
             solve_time += res.runtime
             gap = max(gap, _rel_gap(res.objective, res.bound))
-        dist /= dist.sum()
-        if self.sample_vote:
-            # Physician study: the executed action is drawn from the votes.
-            action = int(rng.choice(size, p=dist))
-        else:
-            action = int(np.argmax(dist))
+        # Physician study: the executed action is drawn from the votes (this
+        # also draws for single-solve experts, keeping the random stream).
+        action, dist = aggregate_votes(votes, size, rng, sample=self.sample_vote)
         return Label(action, dist, solve_time, gap)

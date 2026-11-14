@@ -7,3 +7,4 @@ pyomo
 tqdm
 psutil
 orjson
+gurobipy

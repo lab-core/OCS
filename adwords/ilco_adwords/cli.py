@@ -19,16 +19,15 @@ import argparse
 import json
 import os
 import time
-from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
 import torch
+from ildagger import EpisodeResult, LearnConfig, NumpyPolicy, Runner, learn
 
 from ilco_adwords.experts import EXPERT_KINDS, Expert
-from ilco_adwords.market import Market, make_market, sample_episode
-from ilco_adwords.policy import NumpyPolicy, train_policy
-from ilco_adwords.rollout import EpisodeResult, Runner, split_seeds
+from ilco_adwords.market import Market, make_market, sample_episode, split_seeds
+from ilco_adwords.problem import AdwordsProblem
 from ilco_adwords.solver import offline_optimum
 
 
@@ -47,9 +46,10 @@ def _write_episodes(path: Path, results: list[EpisodeResult], extra: dict) -> No
         "budget_used,solve_time,max_gap"
     ]
     for r in results:
+        st = r.stats
         lines.append(
-            f"{r.seed},{r.revenue},{r.n_queries[0]},{r.n_queries[1]},"
-            f"{r.served[0]},{r.served[1]},{r.budget_used:.5f},"
+            f"{r.seed},{st['objective']},{st['n_regular']},{st['n_premium']},"
+            f"{st['served_regular']},{st['served_premium']},{st['budget_used']:.5f},"
             f"{r.solve_time:.4f},{r.max_gap:.5f}"
         )
     path.write_text("\n".join(lines) + "\n")
@@ -95,12 +95,12 @@ def cmd_expert(args: argparse.Namespace) -> None:
     expert = _expert(args)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    runner = Runner(market, args.workers)
+    runner = Runner(AdwordsProblem(market), args.workers)
     start = time.perf_counter()
     results = runner.run(split_seeds("test", args.n_test), expert=expert)
     runner.close()
     wall = time.perf_counter() - start
-    rev = np.array([r.revenue for r in results])
+    rev = np.array([r.objective for r in results])
     tag = f"{expert.name}_gap{args.gap:g}"
     summary = {
         "expert": expert.name,
@@ -108,51 +108,20 @@ def cmd_expert(args: argparse.Namespace) -> None:
         "mean_revenue": float(rev.mean()),
         "wall_seconds": wall,
         "solve_seconds": float(sum(r.solve_time for r in results)),
-        "decisions": int(sum(r.n_queries.sum() for r in results)),
+        "decisions": int(
+            sum(r.stats["n_regular"] + r.stats["n_premium"] for r in results)
+        ),
     }
     _write_episodes(out / f"expert_{tag}.csv", results, summary)
     print(json.dumps(summary))
-
-
-def _stack(results: list[EpisodeResult]) -> dict[str, np.ndarray]:
-    keep = [r for r in results if r.x is not None]
-    data = {
-        k: np.concatenate([getattr(r, k) for r in keep])
-        for k in ("x", "target", "mask", "epoch_time", "expert_action", "query_class")
-    }
-    data["episode"] = np.concatenate(
-        [np.full(r.n_labels, r.seed) for r in keep]
-    ).astype(np.int64)
-    return data
-
-
-def _merge(a: dict[str, np.ndarray] | None, b: dict[str, np.ndarray]) -> dict:
-    if a is None:
-        return b
-    return {k: np.concatenate([a[k], b[k]]) for k in a}
 
 
 def _evaluate(runner: Runner, policy: NumpyPolicy, split: str, n: int) -> list:
     return runner.run(split_seeds(split, n), policy=policy)
 
 
-def _train(
-    args: argparse.Namespace,
-    data: dict[str, np.ndarray],
-    seed: int,
-    init: NumpyPolicy | None = None,
-) -> tuple[NumpyPolicy, dict]:
-    policy, stats = train_policy(
-        data["x"],
-        data["target"],
-        data["mask"],
-        seed=seed,
-        batch_size=args.batch_size,
-        max_epochs=args.epochs,
-        patience=args.patience,
-        init=init,
-    )
-    return policy.with_sampling(args.policy_action == "sample"), asdict(stats)
+def _mean(results: list[EpisodeResult]) -> float:
+    return float(np.mean([r.objective for r in results]))
 
 
 def cmd_learn(args: argparse.Namespace) -> None:
@@ -162,73 +131,40 @@ def cmd_learn(args: argparse.Namespace) -> None:
     tag = f"{expert.name}_gap{args.gap:g}_{args.mode}_s{args.seed}"
     out = Path(args.out) / tag
     out.mkdir(parents=True, exist_ok=True)
-    runner = Runner(market, args.workers)
+    runner = Runner(AdwordsProblem(market), args.workers)
     # The pool workers are idle while the network trains.
     torch.set_num_threads(max(1, args.workers))
     start = time.perf_counter()
-    label_seconds = 0.0
-    curve = []
-    data = None
-    best = {"val": -np.inf}
-
-    def checkpoint(policy: NumpyPolicy, it: int, episodes: int, stats: dict) -> None:
-        nonlocal best
-        val = _evaluate(runner, policy, "valid", args.n_valid)
-        val_rev = float(np.mean([r.revenue for r in val]))
-        row = {
-            "iteration": it,
-            "episodes": episodes,
-            "samples": int(data["x"].shape[0]),
-            "label_seconds": label_seconds,
-            "wall_seconds": time.perf_counter() - start,
-            "val_revenue": val_rev,
-            **stats,
-        }
-        curve.append(row)
-        print(json.dumps(row), flush=True)
-        if val_rev > best["val"]:
-            best = {"val": val_rev, "policy": policy, "row": row}
-
-    train_seeds = split_seeds("train", args.episodes, run_seed=args.seed)
-    if args.mode == "oneshot":
-        results = runner.run(train_seeds, expert=expert, collect=True)
-        label_seconds = sum(r.solve_time for r in results)
-        data_all = _stack(results)
-        sizes = sorted(
-            {int(s) for s in args.sizes if s <= args.episodes} | {args.episodes}
-        )
-        for size in sizes:
-            keep = np.isin(data_all["episode"], train_seeds[:size])
-            data = {k: v[keep] for k, v in data_all.items()}
-            policy, stats = _train(args, data, args.seed)
-            checkpoint(policy, 0, size, stats)
-        data = data_all
-    else:
-        per_it = args.per_iteration
-        if args.episodes % per_it:
-            raise ValueError("--episodes must be a multiple of --per-iteration")
-        n_it = args.episodes // per_it
-        policy = None
-        for it in range(n_it):
-            beta = 1.0 if it == 0 else args.beta_decay**it
-            seeds = train_seeds[it * per_it : (it + 1) * per_it]
-            results = runner.run(
-                seeds, expert=expert, policy=policy, beta=beta, collect=True
-            )
-            label_seconds += sum(r.solve_time for r in results)
-            data = _merge(data, _stack(results))
-            last = it == n_it - 1
-            if (it + 1) % args.retrain_every == 0 or it == 0 or last:
-                init = policy if args.warm_start else None
-                train_seed = args.seed * 100_000 + it
-                policy, stats = _train(args, data, train_seed, init)
-                checkpoint(policy, it + 1, (it + 1) * per_it, stats)
-
-    test = _evaluate(runner, best["policy"], "test", args.n_test)
+    cfg = LearnConfig(
+        mode=args.mode,
+        seed=args.seed,
+        sizes=args.sizes,
+        per_iteration=args.per_iteration,
+        retrain_every=args.retrain_every,
+        beta_decay=args.beta_decay,
+        warm_start=args.warm_start,
+        policy_action=args.policy_action,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        patience=args.patience,
+    )
+    res = learn(
+        runner,
+        expert,
+        cfg,
+        train_seeds=split_seeds("train", args.episodes, run_seed=args.seed),
+        valid_seeds=split_seeds("valid", args.n_valid),
+        log=lambda line: print(line, flush=True),
+    )
+    test = _evaluate(runner, res.policy, "test", args.n_test)
     # The same weights with the other action rule (mode vs. sampling).
-    other = best["policy"].with_sampling(not best["policy"].sample)
+    other = res.policy.with_sampling(not res.policy.sample)
     test_other = _evaluate(runner, other, "test", args.n_test)
     runner.close()
+    by_rule = {
+        "sample" if res.policy.sample else "mode": test,
+        "sample" if other.sample else "mode": test_other,
+    }
     summary = {
         "expert": expert.name,
         "kind": expert.kind,
@@ -237,34 +173,29 @@ def cmd_learn(args: argparse.Namespace) -> None:
         "mode": args.mode,
         "seed": args.seed,
         "episodes": args.episodes,
-        "best": best["row"],
+        "best": res.best,
         "policy_action": args.policy_action,
-        "test_revenue": float(np.mean([r.revenue for r in test])),
-        "test_revenue_mode": float(
-            np.mean([r.revenue for r in (test if other.sample else test_other)])
-        ),
-        "test_revenue_sample": float(
-            np.mean([r.revenue for r in (test_other if other.sample else test)])
-        ),
-        "label_seconds": label_seconds,
+        "test_revenue": _mean(test),
+        "test_revenue_mode": _mean(by_rule["mode"]),
+        "test_revenue_sample": _mean(by_rule["sample"]),
+        "label_seconds": res.label_seconds,
         "wall_seconds": time.perf_counter() - start,
-        "curve": curve,
+        "curve": res.curve,
     }
     _write_episodes(out / "test.csv", test, summary)
     # Per-episode results of both action rules, for paired comparisons.
-    rule_other = "sample" if other.sample else "mode"
-    _write_episodes(out / f"test_{args.policy_action}.csv", test, summary)
-    _write_episodes(out / f"test_{rule_other}.csv", test_other, summary)
+    for rule, results in by_rule.items():
+        _write_episodes(out / f"test_{rule}.csv", results, summary)
     np.savez_compressed(
-        out / "policy.npz", *[a for wb in best["policy"].weights for a in wb]
+        out / "policy.npz", *[a for wb in res.policy.weights for a in wb]
     )
     if args.save_data:
         np.savez_compressed(
             out / "labels.npz",
-            epoch_time=data["epoch_time"],
-            expert_action=data["expert_action"],
-            query_class=data["query_class"],
-            episode=data["episode"],
+            **{
+                k: res.data[k]
+                for k in ("epoch_time", "expert_action", "query_class", "episode")
+            },
         )
     print(json.dumps({k: v for k, v in summary.items() if k != "curve"}))
 

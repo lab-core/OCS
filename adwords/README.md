@@ -30,9 +30,8 @@ queries of each type, so every MIP expert solves a compact type-count model
 | `ilco_adwords/env.py` | simulator and Bayesian posterior on the remaining queries |
 | `ilco_adwords/solver.py` | type-count MIPs (Gurobi) and hindsight optimum |
 | `ilco_adwords/experts.py` | greedy, MSVV, full-information, deterministic, aggregated, two-stage |
-| `ilco_adwords/policy.py` | features, MLP training (PyTorch), NumPy inference |
-| `ilco_adwords/rollout.py` | parallel episode rollouts with β-mixing |
-| `ilco_adwords/cli.py` | `hindsight`, `expert` and `learn` commands |
+| `ilco_adwords/problem.py` | features and the AdWords problem as an `ildagger` problem |
+| `ilco_adwords/cli.py` | `hindsight`, `expert` and `learn` commands (learning with `ildagger`) |
 | `slurm/` | job-array scripts and experiment grids |
 | `analysis/make_results.py` | tables and figures of the paper |
 | `scripts/calibrate.py` | calibration of the budget tightness |
@@ -40,12 +39,16 @@ queries of each type, so every MIP expert solves a compact type-count model
 
 ## Installation
 
-Python 3.11+ and a Gurobi licence are required:
+Python 3.11+ and a Gurobi licence are required. The learning code is the
+`ildagger` package at the repository root:
 
 ```bash
+pip install -e ..            # ildagger
 pip install -r requirements.txt
 PYTHONPATH=$PWD pytest -q tests
 ```
+
+Without installing `ildagger`, use `PYTHONPATH=$PWD/..:$PWD` instead.
 
 ## Reproducing the experiments
 

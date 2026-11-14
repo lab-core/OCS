@@ -233,3 +233,8 @@ def episode_seed(split: str, index: int, run_seed: int = 0) -> int:
         raise ValueError(f"unknown split {split!r}")
     run_offset = 1_000_000 * run_seed if split == "train" else 0
     return offsets[split] + run_offset + index
+
+
+def split_seeds(split: str, n: int, run_seed: int = 0, start: int = 0) -> list[int]:
+    """Return ``n`` episode seeds of a split starting at index ``start``."""
+    return [episode_seed(split, start + i, run_seed) for i in range(n)]

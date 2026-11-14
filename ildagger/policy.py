@@ -1,9 +1,9 @@
-"""State features and the learned (imitation) policy.
+"""Learned (imitation) policy.
 
 The policy is a multilayer perceptron mapping state features to logits over
-the ``n_adv + 1`` actions; infeasible actions are masked. It is trained with a
-(soft) cross-entropy loss against expert labels and evaluated with a fast
-NumPy forward pass.
+the actions; infeasible actions are masked. It is trained with a (soft)
+cross-entropy loss against expert labels and evaluated with a fast NumPy
+forward pass, so that it can be shipped to worker processes cheaply.
 """
 
 from __future__ import annotations
@@ -15,36 +15,8 @@ import numpy as np
 import torch
 from torch import nn
 
-from ilco_adwords.env import State, feasible_mask
-from ilco_adwords.market import Market
 
 NEG_INF = -1e9
-
-
-def features(market: Market, state: State) -> np.ndarray:
-    """Encode a state as a feature vector.
-
-    Args:
-        market: The market.
-        state: Current state.
-
-    Returns:
-        Float32 feature vector.
-    """
-    one_hot = np.zeros(market.n_types, dtype=np.float32)
-    one_hot[state.query] = 1.0
-    bid = market.bids[:, state.query]
-    mask = feasible_mask(market, state)[1:]
-    return np.concatenate(
-        [
-            [state.time],
-            one_hot,
-            state.observed / market.count_mean,
-            state.budgets / market.budgets,
-            bid / market.bids.max(),
-            mask,
-        ]
-    ).astype(np.float32)
 
 
 class MLP(nn.Module):
@@ -108,13 +80,16 @@ class NumpyPolicy:
         return h @ w + b
 
     def act(
-        self, market: Market, state: State, rng: np.random.Generator | None = None
+        self,
+        x: np.ndarray,
+        mask: np.ndarray,
+        rng: np.random.Generator | None = None,
     ) -> int:
-        """Return a feasible action in a state.
+        """Return a feasible action.
 
         Args:
-            market: The market.
-            state: Current state.
+            x: Feature vector of the state.
+            mask: Boolean feasibility mask over actions.
             rng: Generator used when ``sample`` is True.
 
         Returns:
@@ -123,8 +98,7 @@ class NumpyPolicy:
         Raises:
             ValueError: If sampling is requested without a generator.
         """
-        out = self.logits(features(market, state))
-        out = np.where(feasible_mask(market, state), out, NEG_INF)
+        out = np.where(mask, self.logits(x), NEG_INF)
         if not self.sample:
             return int(np.argmax(out))
         if rng is None:
