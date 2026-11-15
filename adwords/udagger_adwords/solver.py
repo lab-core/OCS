@@ -30,6 +30,10 @@ from gurobipy import GRB
 from udagger_adwords.instance import Market
 
 _ENV: gp.Env | None = None
+# Bonus on the revenue of the current query: among equally good solutions,
+# serve the query now. It only decides ties when the MIP is solved to
+# optimality (or to a gap below 0.1%); at the study's 2% gap Gurobi may return
+# any incumbent within the gap, so ties among near-optimal solutions remain.
 TIE_BREAK = 1e-3
 LICENSE_RETRIES = 10
 

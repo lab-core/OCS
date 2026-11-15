@@ -140,6 +140,7 @@ def std_table(results: Path, out: Path) -> pd.DataFrame | None:
         if not (folder / "hindsight_test.csv").exists():
             continue
         experts, runs, _ = load(folder, STUDY)
+        runs = runs[runs["tag"] == ""]  # --tag variants are not replicates
         for name in STD_EXPERTS:
             on = experts[(experts.expert == name) & np.isclose(experts.gap, BASE_GAP)]
             one = runs[
@@ -224,7 +225,8 @@ def fig_teacher(table: pd.DataFrame, out: Path) -> None:
     offset = 0.3 if regret_units else 15.0  # label above its line
     for key, style, text in (
         ("full", ":", "hindsight"),
-        ("saa30", "--", "2S-30 online"),
+        # From ppa_main.csv: the expert at the 2% gap; fallback: 0.2% baseline.
+        ("saa30", "--", "2S-30 online" + (" (2% gap)" if ppa_csv.exists() else "")),
     ):
         if key in ppa_online:
             ax.axhline(ppa_online[key], color=COLORS[key], ls=style, lw=1)

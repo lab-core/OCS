@@ -26,6 +26,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402  (the backend must be set first)
 
 MODE_LABEL = {"oneshot": "one-shot", "dagger": "DAgger"}
+EXPERT_COLUMNS = ["expert", "gap", "regret", "regret_se", "sec_per_decision"]
+CURVE_COLUMNS = ["expert", "gap", "mode", "seed", "tag", "episodes", "val_regret"]
+CURVE_COLUMNS += ["label_hours"]
 Config = tuple[str, str]  # (expert name, mode)
 
 
@@ -141,7 +144,13 @@ def load(
                     "label_hours": row["label_seconds"] / 3600.0,
                 }
             )
-    return pd.DataFrame(experts), pd.DataFrame(runs), pd.DataFrame(curves)
+    run_cols = ["expert", "gap", "mode", "seed", "tag", "regret", "regret_mode"]
+    run_cols += ["best_episodes", "label_hours", "wall_hours"]
+    return (
+        pd.DataFrame(experts, columns=EXPERT_COLUMNS),
+        pd.DataFrame(runs, columns=run_cols),
+        pd.DataFrame(curves, columns=CURVE_COLUMNS),
+    )
 
 
 def summary(experts: pd.DataFrame, runs: pd.DataFrame) -> str:
@@ -371,7 +380,8 @@ def fig_curves(study: Study, curves: pd.DataFrame, out: Path) -> None:
     axes[1].set_xlabel("expert labelling time (CPU hours)", fontsize=8)
     axes[1].set_xscale("log")
     axes[0].set_ylabel("validation regret (%)", fontsize=8)
-    axes[0].legend(fontsize=7, ncol=2, frameon=False)
+    if axes[0].get_legend_handles_labels()[0]:
+        axes[0].legend(fontsize=7, ncol=2, frameon=False)
     for a in axes:
         a.tick_params(labelsize=7)
         a.spines[["top", "right"]].set_visible(False)
@@ -390,8 +400,8 @@ def standard_outputs(study: Study, results: Path, out: Path) -> pd.DataFrame:
     (out / "figs").mkdir(parents=True, exist_ok=True)
     experts, runs, curves = load(results, study)
     # Runs saved under a --tag are variants, not replicates of the main study.
-    runs = runs[runs["tag"] == ""] if not runs.empty else runs
-    curves = curves[curves["tag"] == ""] if not curves.empty else curves
+    runs = runs[runs["tag"] == ""]
+    curves = curves[curves["tag"] == ""]
     print(summary(experts, runs))
     table = main_table(study, experts, runs, out)
     gap_table(study, experts, runs, out)

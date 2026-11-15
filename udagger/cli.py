@@ -63,7 +63,13 @@ class Application:
 
 def _hindsight_task(task: tuple) -> tuple[int, float, float]:
     hindsight, args, seed = task
-    out = hindsight(args, seed)
+    try:
+        out = hindsight(args, seed)
+    except Exception as err:
+        # One failed episode (e.g. no solution within the time limit) must
+        # not lose the results of the whole split.
+        print(f"hindsight of episode {seed} failed: {err!r}", flush=True)
+        return seed, float("nan"), float("nan")
     value, gap = out if isinstance(out, tuple) else (out, 0.0)
     return seed, float(value), float("nan") if gap is None else float(gap)
 
@@ -80,7 +86,12 @@ def cmd_hindsight(app: Application, args: argparse.Namespace) -> None:
         (out / f"hindsight_{split}.csv").write_text(text)
         mean = sum(v for _, v, _ in rows) / max(1, len(rows))
         print(split, "mean hindsight", mean)
-        not_optimal = [s for s, _, g in rows if not g <= 1e-6]
+        failed = [s for s, v, _ in rows if v != v]
+        if failed:
+            print(
+                f"warning: {len(failed)} {split} optima failed, e.g. seed {failed[0]}"
+            )
+        not_optimal = [s for s, v, g in rows if v == v and not g <= 1e-6]
         if not_optimal:
             print(
                 f"warning: {len(not_optimal)} {split} optima not proven "
@@ -91,6 +102,10 @@ def cmd_hindsight(app: Application, args: argparse.Namespace) -> None:
 def cmd_expert(app: Application, args: argparse.Namespace) -> None:
     """Evaluate an expert used directly as an online policy."""
     expert = app.make_expert(args)
+    tag = f"{expert.name}_gap{args.gap:g}{args.tag}"
+    options = _options(args)
+    if _done(Path(args.out) / f"expert_{tag}.json", options, args.force):
+        return
     runner = Runner(app.make_problem(args), args.workers)
     try:
         summary = evaluate_expert(
@@ -98,9 +113,9 @@ def cmd_expert(app: Application, args: argparse.Namespace) -> None:
             expert,
             app.seeds("test", args.n_test, 0),
             Path(args.out),
-            tag=f"{expert.name}_gap{args.gap:g}",
+            tag=tag,
             objective=app.objective,
-            meta={"expert": expert.name, "gap": args.gap},
+            meta={"expert": expert.name, "gap": args.gap, "options": options},
         )
     finally:
         runner.close()
@@ -111,8 +126,11 @@ def cmd_learn(app: Application, args: argparse.Namespace) -> None:
     """Learn a policy from an expert with one-shot cloning or DAgger."""
     expert = app.make_expert(args)
     tag = f"{expert.name}_gap{args.gap:g}_{args.mode}_s{args.seed}{args.tag}"
-    options = {k: v for k, v in vars(args).items() if k not in _NOT_EXPERIMENT}
-    _check_overwrite(Path(args.out) / tag / "test.json", options)
+    options = _options(args)
+    if _done(Path(args.out) / tag / "test.json", options, args.force):
+        return
+    # Options that only matter after learning do not prevent a resume.
+    context = {k: v for k, v in options.items() if k not in _AFTER_LEARNING}
     runner = Runner(app.make_problem(args), args.workers)
     try:
         run_learning(
@@ -131,13 +149,14 @@ def cmd_learn(app: Application, args: argparse.Namespace) -> None:
                 "gap": args.gap,
                 "options": options,
             },
+            context=context,
         )
     finally:
         runner.close()
 
 
 # Options that do not change the experiment (where results go, parallelism,
-# whether labels are saved): ignored when comparing runs.
+# whether labels are saved, checkpoints, reruns): ignored when comparing runs.
 _NOT_EXPERIMENT = (
     "func",
     "workers",
@@ -145,20 +164,35 @@ _NOT_EXPERIMENT = (
     "out_suffix",
     "save_data",
     "checkpoint_every",
+    "force",
 )
+# Options only used after learning (test episodes, folder name).
+_AFTER_LEARNING = ("n_test", "tag", "command")
 
 
-def _check_overwrite(summary: Path, options: dict) -> None:
-    """Refuse to overwrite a run made with different options."""
+def _options(args: argparse.Namespace) -> dict:
+    return {k: v for k, v in vars(args).items() if k not in _NOT_EXPERIMENT}
+
+
+def _done(summary: Path, options: dict, force: bool) -> bool:
+    """Whether the run is already complete (then skip it).
+
+    Raises:
+        SystemExit: If the file holds a run made with other options.
+    """
     if not summary.exists():
-        return
+        return False
     previous = json.loads(summary.read_text()).get("options")
     if previous is not None and previous != options:
         changed = sorted(k for k in options if previous.get(k) != options[k])
         raise SystemExit(
-            f"{summary.parent} holds a run with other options ({changed}); "
+            f"{summary} holds a run with other options ({changed}); "
             "use --tag to name this variant"
         )
+    if force:
+        return False
+    print(f"{summary} is complete with the same options; skipped (--force reruns)")
+    return True
 
 
 def add_expert_arguments(parser: argparse.ArgumentParser, kinds: Sequence[str]) -> None:
@@ -172,6 +206,12 @@ def add_expert_arguments(parser: argparse.ArgumentParser, kinds: Sequence[str]) 
         action=argparse.BooleanOptionalAction,
         default=True,
         help="act by sampling the votes of the solved models (else majority)",
+    )
+    parser.add_argument(
+        "--tag", default="", help="suffix of the result names (variants of options)"
+    )
+    parser.add_argument(
+        "--force", action="store_true", help="rerun even if the run is complete"
     )
 
 
@@ -203,9 +243,6 @@ def build_parser(app: Application, description: str) -> argparse.ArgumentParser:
     p_learn = sub.add_parser("learn")
     add_expert_arguments(p_learn, app.expert_kinds)
     add_learn_arguments(p_learn)
-    p_learn.add_argument(
-        "--tag", default="", help="suffix of the run folder (variants of options)"
-    )
     p_learn.set_defaults(func=cmd_learn)
     return parser
 

@@ -37,8 +37,10 @@ from OCS import AppointmentScheduler
 from utility import Config, build_config, parse_args
 
 SPLIT_SEED = {"test": 5001, "valid": 6001}
-# Offset of the scenario seeds of experts evaluated online (training uses
-# 1000 + 100 n + i, see Learn_Main.py).
+# Offset of the scenario seeds of experts evaluated online. Training uses
+# config.seed * 10**7 + 100 (n runs + i) with --seed_in_name, and otherwise
+# the original 1000 + 100 n + i, which overlaps the test (5001+) and
+# validation (6001+) episode seeds; see Learn_Main.py.
 EXPERT_SEED_OFFSET = 10_000_000
 _W: dict = {}
 

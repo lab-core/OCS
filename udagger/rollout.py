@@ -93,16 +93,27 @@ def run_episode(
         state = episode.observe()
         use_expert = expert is not None and (policy is None or rng.random() < beta)
         label = None
+        x = mask = None
         if expert is not None and (collect or use_expert):
             label = expert(episode, state, rng)
             solve_time += label.solve_time
             max_gap = max(max_gap, label.gap)
-        x = mask = None
+            mask = episode.mask(state)
+            if use_expert and not mask[label.action]:
+                raise ValueError(
+                    f"expert {getattr(expert, 'name', expert)} chose the "
+                    f"infeasible action {label.action} (episode {seed})"
+                )
         if collect and label is not None:
-            x, mask = episode.features(state), episode.mask(state)
+            x = episode.features(state)
+            target = label.dist
+            if np.any(target[~mask] > 0):
+                # Mass on infeasible actions cannot be learned (masked logits).
+                target = np.where(mask, target, 0.0)
+                target = target / target.sum()
             sample = {
                 "x": x,
-                "target": label.dist,
+                "target": target,
                 "mask": mask,
                 "expert_action": label.action,
                 **episode.info(state),
@@ -113,7 +124,9 @@ def run_episode(
             action = label.action
         elif policy is not None:
             if x is None:
-                x, mask = episode.features(state), episode.mask(state)
+                x = episode.features(state)
+            if mask is None:
+                mask = episode.mask(state)
             action = policy.act(x, mask, policy_rng)
         else:
             raise ValueError("no policy to act")

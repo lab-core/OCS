@@ -135,6 +135,7 @@ def run_learning(
     out: Path,
     objective: str,
     meta: dict,
+    context: dict | None = None,
 ) -> dict:
     """Learn from an expert, test both action rules and write the results.
 
@@ -148,6 +149,8 @@ def run_learning(
         out: Folder of the run.
         objective: Column name of the objective in the CSV files.
         meta: Extra entries of the summary (expert, gap, ...).
+        context: Settings that a checkpoint must match to be resumed
+            (default: ``meta``).
 
     Returns:
         The summary written to ``test.json``.
@@ -166,7 +169,9 @@ def run_learning(
         log=lambda line: print(line, flush=True),
         checkpoint_dir=checkpoint_dir,
         checkpoint_every=max(1, every),
-        context=json.loads(json.dumps(meta, default=str)),
+        context=json.loads(
+            json.dumps(meta if context is None else context, default=str)
+        ),
     )
     learned = time.perf_counter()
     by_rule: dict[str, list[EpisodeResult]] = {}

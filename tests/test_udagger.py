@@ -332,3 +332,135 @@ def test_invalid_sizes_are_ignored() -> None:
         log=lambda line: None,
     )
     assert [r["episodes"] for r in res.curve] == [5, 10]
+
+
+def _toy_app(hindsight: object = _toy_hindsight) -> object:
+    """Application of the toy problem for the generic command line."""
+    from udagger.cli import Application
+
+    return Application(
+        name="toy",
+        objective="score",
+        expert_kinds=("oracle",),
+        add_arguments=lambda parser: None,
+        make_problem=_toy_problem,
+        make_expert=_toy_expert,
+        seeds=_toy_seeds,
+        hindsight=hindsight,
+    )
+
+
+def _failing_hindsight(args: object, seed: int) -> float:
+    if seed == 1:
+        raise RuntimeError("no incumbent")
+    return 10.0
+
+
+def test_reruns_variants_and_failures(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """Completed runs are skipped, variants need a tag, failures are recorded."""
+    from udagger.analysis import Study, standard_outputs
+    from udagger.cli import main
+
+    app = _toy_app()
+    out = ["--out", str(tmp_path), "--n-valid", "2", "--n-test", "3"]
+    expert = ["expert", "--expert", "oracle"]
+    main(app, "", [*out, *expert])
+    main(app, "", [*out, *expert])
+    assert "skipped" in capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        main(app, "", [*out, *expert, "--time-limit", "5"])
+    main(app, "", [*out, *expert, "--time-limit", "5", "--tag", "_t5"])
+    assert (tmp_path / "expert_oracle_gap0.02_t5.csv").exists()
+
+    main(_toy_app(_failing_hindsight), "", [*out, "hindsight"])
+    import pandas as pd
+
+    test = pd.read_csv(tmp_path / "hindsight_test.csv")
+    assert test["hindsight"].isna().sum() == 1  # seed 1 failed, others kept
+
+    # The analysis runs before any learning run exists.
+    study = Study(
+        prefix="toy",
+        objective="score",
+        maximize=True,
+        order=["oracle"],
+        labels={"oracle": "Oracle"},
+        short={"oracle": "Oracle"},
+        colors={"oracle": "k"},
+    )
+    table = standard_outputs(study, tmp_path, tmp_path / "paper")
+    assert table.empty
+
+
+class JobEnded(Exception):
+    """Simulated end of a cluster job (time limit)."""
+
+
+def test_resume_ignores_options_used_after_learning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """A run interrupted and resubmitted with another --n-test resumes."""
+    from udagger.cli import main
+    from udagger.rollout import Runner as RunnerClass
+
+    app = _toy_app()
+    base = ["--out", str(tmp_path), "--n-valid", "2"]
+    learn_args = ["learn", "--expert", "oracle", "--mode", "dagger"]
+    learn_args += ["--episodes", "20", "--epochs", "2", "--checkpoint-every", "1"]
+    original = RunnerClass.run
+    calls = {"collect": 0}
+
+    def crash_after_one(self: RunnerClass, seeds: list[int], **kw: object) -> list:
+        if kw.get("collect"):
+            calls["collect"] += 1
+            if calls["collect"] > 1:
+                raise JobEnded
+        return original(self, seeds, **kw)
+
+    monkeypatch.setattr(RunnerClass, "run", crash_after_one)
+    with pytest.raises(JobEnded):
+        main(app, "", [*base, "--n-test", "2", *learn_args])
+    run = tmp_path / "oracle_gap0.02_dagger_s0"
+    assert (run / "checkpoint" / "state.json").exists()
+    monkeypatch.setattr(RunnerClass, "run", original)
+    main(app, "", [*base, "--n-test", "4", *learn_args])
+    assert '"resumed"' in capsys.readouterr().out
+    import pandas as pd
+
+    assert len(pd.read_csv(run / "test.csv")) == 4
+    assert not (run / "checkpoint").exists()
+
+
+class BadExpert(OracleExpert):
+    """Expert that labels an infeasible action at odd epochs."""
+
+    name = "bad"
+
+    def __call__(
+        self, episode: ToyEpisode, state: int, rng: np.random.Generator
+    ) -> Label:
+        """Put half of the target on action 0, which is infeasible at odd epochs."""
+        label = super().__call__(episode, state, rng)
+        dist = 0.5 * label.dist
+        dist[0] += 0.5
+        return Label(label.action, dist)
+
+
+def test_infeasible_expert_targets_and_actions() -> None:
+    """Mass on infeasible actions is dropped; infeasible actions raise."""
+    res = run_episode(ToyProblem(), 3, BadExpert(), collect=True)
+    data = stack([res])
+    odd = data["epoch"] % 2 == 1
+    assert np.all(data["target"][odd, 0] == 0)
+    np.testing.assert_allclose(data["target"].sum(axis=1), 1.0)
+
+    class Infeasible(OracleExpert):
+        def __call__(
+            self, episode: ToyEpisode, state: int, rng: np.random.Generator
+        ) -> Label:
+            return Label(0, one_hot(0, episode.n_actions))
+
+    with pytest.raises(ValueError, match="infeasible"):
+        run_episode(ToyProblem(), 3, Infeasible())

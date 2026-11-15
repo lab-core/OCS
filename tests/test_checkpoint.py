@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import numpy as np
@@ -106,14 +105,24 @@ def test_checkpoint_of_another_run_is_refused(tmp_path: Path) -> None:
 
 
 def test_interrupted_save_keeps_previous_checkpoint(tmp_path: Path) -> None:
-    """Files of two different saves are not mixed."""
+    """Files of an unfinished save are ignored, then cleaned up."""
     folder = tmp_path / "ckpt"
     fingerprint = {"run": 1}
     ckpt.save(folder, fingerprint, {"next": 2}, {"x": np.zeros((2, 3))})
-    assert ckpt.load(folder, fingerprint)["state"]["next"] == 2
-    meta = json.loads((folder / "state.json").read_text())
-    meta["token"] = "another-save"
-    (folder / "state.json").write_text(json.dumps(meta))
-    assert ckpt.load(folder, fingerprint) is None
+    # A save killed before state.json was replaced leaves orphan files.
+    np.savez(folder / "data_00001.npz", x=np.ones((5, 3)))
+    np.savez(folder / "policies_orphan.npz")
+    loaded = ckpt.load(folder, fingerprint)
+    assert loaded["state"]["next"] == 2
+    assert loaded["data"]["x"].shape == (2, 3)
+    # The next save only writes the new samples and removes the orphans.
+    ckpt.save(folder, fingerprint, {"next": 3}, {"x": np.full((1, 3), 7.0)})
+    loaded = ckpt.load(folder, fingerprint)
+    assert loaded["data"]["x"].shape == (3, 3) and loaded["data"]["x"][-1, 0] == 7
+    assert not (folder / "policies_orphan.npz").exists()
+    assert sorted(p.name for p in folder.glob("data_*.npz")) == [
+        "data_00000.npz",
+        "data_00001.npz",
+    ]
     ckpt.remove(folder)
     assert not folder.exists()

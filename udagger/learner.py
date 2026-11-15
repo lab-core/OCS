@@ -174,10 +174,14 @@ def learn(
         "context": context or {},
     }
     saved = ckpt.load(checkpoint_dir, fingerprint) if checkpoint_dir else None
+    saved_rows = 0  # samples already in the checkpoint
+    episode_seconds: list[float] = []  # one-shot: labelling time per episode
     if saved is not None:
         st = saved["state"]
         elapsed, label_seconds, curve = st["elapsed"], st["label_seconds"], st["curve"]
+        episode_seconds = st.get("episode_seconds", [])
         data = saved["data"]
+        saved_rows = len(data["x"]) if data else 0
         if saved["best"] is not None:
             best = {"score": st["best_score"], "policy": saved["best"]}
             best["row"] = st["best_row"]
@@ -187,17 +191,21 @@ def learn(
         return elapsed + time.perf_counter() - start
 
     def save(next_step: int, policy: NumpyPolicy | None) -> None:
+        nonlocal saved_rows
         if checkpoint_dir is None:
             return
         state = {
             "next": next_step,
             "elapsed": wall(),
             "label_seconds": label_seconds,
+            "episode_seconds": episode_seconds,
             "curve": curve,
             "best_score": best["score"] if "policy" in best else None,
             "best_row": best.get("row"),
         }
-        ckpt.save(checkpoint_dir, fingerprint, state, data, policy, best.get("policy"))
+        new = {k: v[saved_rows:] for k, v in data.items()}
+        ckpt.save(checkpoint_dir, fingerprint, state, new, policy, best.get("policy"))
+        saved_rows = len(data["x"]) if data else 0
 
     def checkpoint(policy: NumpyPolicy, it: int, episodes: int, stats: dict) -> None:
         nonlocal best
@@ -222,12 +230,17 @@ def learn(
     if cfg.mode == "oneshot":
         # Label in blocks (one checkpoint per block); the episodes are
         # independent, so the data equal those of a single call.
+        # Blocks are a multiple of the number of workers, so that no worker
+        # idles at a block boundary.
+        workers = max(1, runner.workers)
         block = max(1, cfg.per_iteration * checkpoint_every)
+        block = -(-block // workers) * workers
         done = saved["state"]["next"] if saved is not None else 0
         while done < n_episodes:
             seeds = train_seeds[done : done + block]
             results = runner.run(seeds, expert=expert, collect=True)
             label_seconds += sum(r.solve_time for r in results)
+            episode_seconds += [r.solve_time for r in results]
             data = merge(data, stack(results))
             done += len(seeds)
             save(done, None)
@@ -236,12 +249,15 @@ def learn(
             raise ValueError("no state was labelled by the expert")
         sizes = {int(s) for s in cfg.sizes if 0 < s <= n_episodes}
         sizes = sorted(sizes | {n_episodes})
+        total_seconds = label_seconds
         for size in sizes:
             keep = np.isin(data_all["episode"], train_seeds[:size])
             data = {k: v[keep] for k, v in data_all.items()}
             policy, stats = _train(cfg, data, cfg.seed)
+            # Labelling time of the episodes used by this policy.
+            label_seconds = float(sum(episode_seconds[:size]))
             checkpoint(policy, 0, size, stats)
-        data = data_all
+        data, label_seconds = data_all, total_seconds
     else:
         per_it = cfg.per_iteration
         if n_episodes % per_it:
