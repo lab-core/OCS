@@ -126,4 +126,7 @@ revenue as a fraction of the hindsight optimum:
 | **1.2** | **0.7** | 0.885 | 0.904 | 0.950 | 0.960 | 0.989 | **0.085** |
 | 1.2 | 1.0 | 0.886 | 0.903 | 0.944 | 0.951 | 0.978 | 0.076 |
 
-The selected setting (1.2, 0.7) is the default of `udagger_adwords.cli`.
+The selected setting (1.2, 0.7) is the default of `udagger_adwords.cli`. The
+experts of this table use optimal MIPs, a 10 s limit and majority votes
+(`exact`). With the settings of the study (`protocol`: 2% gap, 30 s, sampled
+votes), the same setting is selected (score 0.077, next best 0.070).
