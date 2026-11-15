@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run line $SLURM_ARRAY_TASK_ID of a grid file with the command line of an
 # example: sbatch [options] slurm/array.sh APP GRID, where APP is adwords or
-# ppa and GRID a file written by APP/slurm/make_grid.py. Each line holds the
+# ppa and GRID a file written by APP/make_grid.py. Each line holds the
 # options of `python -m udagger_APP.cli`; results go to $UDAGGER_OUT/APP.
 # Give your allocation with --account (or $SBATCH_ACCOUNT).
 #SBATCH --time=24:00:00

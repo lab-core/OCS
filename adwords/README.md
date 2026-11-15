@@ -33,10 +33,10 @@ queries of each type, so every MIP expert solves a compact type-count model
 | `udagger_adwords/experts.py` | greedy, MSVV, full-information, deterministic, aggregated, two-stage |
 | `udagger_adwords/problem.py` | the AdWords problem and its episodes for `udagger` |
 | `udagger_adwords/cli.py` | the application for the generic command line (`udagger.cli`) |
-| `slurm/make_grid.py` | experiment grids (run with the shared `../slurm/array.sh`) |
-| `analysis/make_results.py` | tables and figures of the paper (with `udagger.analysis`) |
-| `scripts/calibrate.py` | calibration of the budget tightness |
-| `tests/` | unit tests and a regression test against the pre-refactor results |
+| `make_grid.py` | experiment grids (run with the shared `../slurm/array.sh`) |
+| `make_results.py` | tables and figures of the paper (with `udagger.analysis`) |
+| `calibrate.py` | calibration of the budget tightness |
+| `test_adwords.py`, `test_regression.py` | unit tests and a regression test against the pre-refactor results |
 
 ## Installation
 
@@ -46,7 +46,7 @@ Python 3.11+ and a Gurobi licence are required. The learning code is the
 ```bash
 pip install -e ..            # udagger
 pip install -r requirements.txt
-PYTHONPATH=$PWD pytest -q tests
+PYTHONPATH=$PWD pytest -q
 ```
 
 Without installing `udagger`, use `PYTHONPATH=$PWD/..:$PWD` instead. The
@@ -73,15 +73,15 @@ shared job script (results in `$UDAGGER_OUT/adwords`, by default
 `~/scratch/udagger/adwords`; give your allocation with `--account`):
 
 ```bash
-python adwords/slurm/make_grid.py
-sbatch --array=1-15 --time=3:00:00 slurm/array.sh adwords adwords/slurm/expert_grid.txt
+python adwords/make_grid.py
+sbatch --array=1-15 --time=3:00:00 slurm/array.sh adwords adwords/expert_grid.txt
 # One-shot runs are the odd lines and DAgger runs the even lines (then 101-115).
-sbatch --array=1-99:2 --time=3:00:00 slurm/array.sh adwords adwords/slurm/learn_grid.txt
-sbatch --array=2-100:2,101-115 --time=3-00:00:00 slurm/array.sh adwords adwords/slurm/learn_grid.txt
-sbatch --array=1-62 --time=3:00:00 slurm/array.sh adwords adwords/slurm/std_grid.txt
+sbatch --array=1-99:2 --time=3:00:00 slurm/array.sh adwords adwords/learn_grid.txt
+sbatch --array=2-100:2,101-115 --time=3-00:00:00 slurm/array.sh adwords adwords/learn_grid.txt
+sbatch --array=1-62 --time=3:00:00 slurm/array.sh adwords adwords/std_grid.txt
 ```
 
-Then run `python analysis/make_results.py RESULTS_DIR PAPER_DIR`. It writes
+Then run `python make_results.py RESULTS_DIR PAPER_DIR`. It writes
 `tables/adwords_*.tex` and `figs/*.pdf` into the paper folder.
 
 ## Experimental protocol
@@ -111,7 +111,7 @@ The defaults of `udagger_adwords.cli` follow the physician study (`../ppa`).
 
 ## Calibration of the budgets
 
-`scripts/calibrate.py 100 32` scores each setting on 100 calibration episodes,
+`calibrate.py 100 32` scores each setting on 100 calibration episodes,
 which are disjoint from the training, validation and test episodes. The score
 is the margin of the two-stage expert (10 scenarios) over the best myopic rule,
 with ties broken by its margin over the deterministic expert. The numbers are

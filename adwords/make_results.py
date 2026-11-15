@@ -2,7 +2,7 @@
 
 Usage::
 
-    python analysis/make_results.py RESULTS_DIR PAPER_DIR
+    python make_results.py RESULTS_DIR PAPER_DIR
 
 ``RESULTS_DIR`` is the output directory of ``udagger_adwords.cli``; LaTeX tables
 are written to ``PAPER_DIR/tables`` and PDF figures to ``PAPER_DIR/figs``.

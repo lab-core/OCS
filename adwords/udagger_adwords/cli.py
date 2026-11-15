@@ -23,7 +23,7 @@ from udagger_adwords.solver import offline_optimum
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
-    """Options of the market (budgets calibrated in ``scripts/calibrate.py``)."""
+    """Options of the market (budgets calibrated in ``calibrate.py``)."""
     parser.add_argument("--market-seed", type=int, default=0)
     parser.add_argument("--tightness", type=float, default=1.2)
     parser.add_argument("--premium-tightness", type=float, default=0.7)

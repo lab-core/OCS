@@ -2,7 +2,7 @@
 
 Usage::
 
-    python analysis/make_results.py RESULTS_DIR PAPER_DIR
+    python make_results.py RESULTS_DIR PAPER_DIR
 
 Writes ``tables/ppa_{main,gap,tests}.tex`` and ``figs/ppa_curves.pdf`` into
 ``PAPER_DIR`` (same tables as the AdWords example; costs are compared through

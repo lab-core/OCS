@@ -24,13 +24,13 @@ Both examples have exactly the same structure:
   experts.py    experts (subclasses of udagger.experts.ExpertSpec)
   problem.py    Problem and Episode for udagger
   cli.py        the Application of the generic command line
-<app>/slurm/make_grid.py   experiment grids (udagger.grid)
-<app>/analysis/            tables and figures (udagger.analysis)
-<app>/tests/
+<app>/make_grid.py         experiment grids (udagger.grid)
+<app>/make_results.py      tables and figures (udagger.analysis)
+<app>/test_<app>.py        tests
 ```
 
 Run an example with `python -m udagger_<app>.cli {hindsight,expert,learn}`;
-the options and output files are the same. `adwords/scripts/` holds the
+the options and output files are the same. `adwords/calibrate.py` is the
 calibration of the AdWords instance. The original scripts of the physician
 study are available at the git tag `ppa`.
 
@@ -100,7 +100,7 @@ settings is refused. The folder is removed when the run completes.
 pip install -e ".[test]"                  # the package
 pip install -r adwords/requirements.txt   # example 1
 pip install -r ppa/requirements.txt       # example 2 (Pyomo, Gurobi)
-PYTHONPATH=$PWD/adwords:$PWD/ppa pytest tests adwords/tests ppa/tests
+PYTHONPATH=$PWD/adwords:$PWD/ppa pytest tests adwords ppa
 ```
 
 The examples import `udagger` from the repository root. Without installing

@@ -47,7 +47,7 @@ def main() -> None:
     MSVV), in ratio to the hindsight optimum, so that anticipation matters;
     ties are broken by its margin over the deterministic expert.
 
-    Usage: ``python scripts/calibrate.py [N_EPISODES] [WORKERS] [SETTINGS]``
+    Usage: ``python calibrate.py [N_EPISODES] [WORKERS] [SETTINGS]``
     with SETTINGS ``exact`` (default) or ``protocol``.
     """
     n_ep = int(sys.argv[1]) if len(sys.argv) > 1 else 100

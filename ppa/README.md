@@ -36,9 +36,9 @@ is the total cost of an episode, which is minimised.
 | `udagger_ppa/problem.py` | the PPA problem and its episodes for `udagger` |
 | `udagger_ppa/cli.py` | the application for the generic command line (`udagger.cli`) |
 | `udagger_ppa/_scheduler.py`, `_stochastic.py` | simulator and MIP classes of the original study (Pyomo + Gurobi) |
-| `slurm/make_grid.py` | experiment grids (run with the shared `../slurm/array.sh`) |
-| `analysis/make_results.py` | tables and figures (with `udagger.analysis`) |
-| `tests/` | unit tests |
+| `make_grid.py` | experiment grids (run with the shared `../slurm/array.sh`) |
+| `make_results.py` | tables and figures (with `udagger.analysis`) |
+| `test_ppa.py` | unit tests |
 
 ## Installation
 
@@ -48,7 +48,7 @@ Python 3.11+ and a Gurobi licence are required. The learning code is the
 ```bash
 pip install -e ..            # udagger
 pip install -r requirements.txt
-PYTHONPATH=$PWD pytest -q tests
+PYTHONPATH=$PWD pytest -q
 ```
 
 Without installing `udagger`, use `PYTHONPATH=$PWD/..:$PWD` instead. The
@@ -76,14 +76,14 @@ shared job script (results in `$UDAGGER_OUT/ppa`, by default
 `~/scratch/udagger/ppa`; give your allocation with `--account`):
 
 ```bash
-python ppa/slurm/make_grid.py
+python ppa/make_grid.py
 # MIPs use 2 threads: one worker per 2 cores.
 export UDAGGER_WORKERS=16
-sbatch --array=1-14 --time=3-00:00:00 --mem-per-cpu=4G slurm/array.sh ppa ppa/slurm/expert_grid.txt
-sbatch --array=1-57 --time=7-00:00:00 --mem-per-cpu=4G slurm/array.sh ppa ppa/slurm/learn_grid.txt
+sbatch --array=1-14 --time=3-00:00:00 --mem-per-cpu=4G slurm/array.sh ppa ppa/expert_grid.txt
+sbatch --array=1-57 --time=7-00:00:00 --mem-per-cpu=4G slurm/array.sh ppa ppa/learn_grid.txt
 ```
 
-Then run `python analysis/make_results.py RESULTS_DIR PAPER_DIR`.
+Then run `python make_results.py RESULTS_DIR PAPER_DIR`.
 
 ## Original code
 

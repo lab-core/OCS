@@ -1,6 +1,6 @@
 """Write the PPA experiment grids for ``slurm/array.sh ppa GRID``.
 
-Same protocol as ``adwords/slurm/make_grid.py`` (defaults of the command
+Same protocol as ``adwords/make_grid.py`` (defaults of the command
 line), with 3 replicates as in the rerun of the physician study.
 """
 
