@@ -1,6 +1,6 @@
 """Two-stage stochastic MIP of the physician-to-patient assignment.
 
-Moved from ``src/SOCS.py`` of the original study; only the command-line demo
+From ``src/SOCS.py`` of the original study (git tag ``ppa``); only the command-line demo
 and the memory tracker were removed.
 """
 

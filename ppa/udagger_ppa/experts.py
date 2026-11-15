@@ -12,7 +12,8 @@ The experts follow the taxonomy of the paper (treatment of uncertainty):
 * ``saa``: two-stage stochastic expert with ``K`` scenarios.
 
 The models are built and solved exactly as by ``IO_learning`` in the
-original scripts (``legacy/Learn_Module.py``); as there, the executed action
+original scripts (``src/Learn_Module.py``, git tag ``ppa``); as there, the
+executed action
 is drawn from the votes of the solved models.
 """
 

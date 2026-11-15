@@ -3,7 +3,7 @@
 # example: sbatch [options] slurm/array.sh APP GRID, where APP is adwords or
 # ppa and GRID a file written by APP/slurm/make_grid.py. Each line holds the
 # options of `python -m udagger_APP.cli`; results go to $UDAGGER_OUT/APP.
-#SBATCH --account=def-legraina_cpu
+# Give your allocation with --account (or $SBATCH_ACCOUNT).
 #SBATCH --time=24:00:00
 #SBATCH --cpus-per-task=32
 #SBATCH --mem-per-cpu=2G

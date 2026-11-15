@@ -6,9 +6,7 @@ Usage::
 
 Writes ``tables/ppa_{main,gap,tests}.tex`` and ``figs/ppa_curves.pdf`` into
 ``PAPER_DIR`` (same tables as the AdWords example; costs are compared through
-their regret, the relative excess cost over the hindsight optimum). The
-results of the original scripts (``legacy/``) are analysed by
-``legacy/analysis/make_results.py``.
+their regret, the relative excess cost over the hindsight optimum).
 """
 
 from __future__ import annotations

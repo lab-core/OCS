@@ -1,6 +1,6 @@
 """Instance parameters, episode seeds and arguments of the PPA models.
 
-The defaults are those of the original study (``legacy/utility.py``): 4
+The defaults are those of the original study (``src/utility.py``, tag ``ppa``): 4
 physicians with 20 appointments, N(25, 5) priority-1 and N(75, 12)
 priority-2 requests, rejection costs 200 and 50, and a non-preferred
 assignment penalty of 10% of the rejection cost.

@@ -1,4 +1,4 @@
-"""State features of the PPA policy (from the original ``IO_learning``)."""
+"""State features of the PPA policy (as ``IO_learning`` of the original study)."""
 
 from __future__ import annotations
 

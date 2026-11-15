@@ -201,7 +201,7 @@ def fig_teacher(table: pd.DataFrame, out: Path) -> None:
     regret_units = False
     ppa_csv = out / "tables" / "ppa_main.csv"
     if ppa_csv.exists():
-        # Rerun of the physician study: costs (legacy/analysis) or regrets in %
+        # Physician study: costs (original analysis) or regrets in %
         # (ppa/analysis, column metric = "regret").
         ppa = pd.read_csv(ppa_csv).set_index("expert")
         regret_units = "metric" in ppa and (ppa["metric"] == "regret").all()

@@ -1,6 +1,6 @@
 """Simulator and deterministic MIP of the physician-to-patient assignment.
 
-Moved from ``src/OCS.py`` of the original study; only the command-line demo
+From ``src/OCS.py`` of the original study (git tag ``ppa``); only the command-line demo
 and the memory tracker were removed.
 """
 

@@ -31,8 +31,8 @@ Both examples have exactly the same structure:
 
 Run an example with `python -m udagger_<app>.cli {hindsight,expert,learn}`;
 the options and output files are the same. `adwords/scripts/` holds the
-calibration of the AdWords instance and `ppa/legacy/` the original scripts
-of the physician study.
+calibration of the AdWords instance. The original scripts of the physician
+study are available at the git tag `ppa`.
 
 ## The `udagger` package
 

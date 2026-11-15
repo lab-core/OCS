@@ -1,63 +1,44 @@
-# Problem Description: Dynamic Physician-to-Patient Assignment (PPA)
+# Dynamic physician-to-patient assignment (PPA)
 
-## Overview
-We consider a **dynamic physician-to-patient assignment (PPA)** problem arising in clinic appointment booking. Patients (call-ins) arrive sequentially over a booking horizon until a cutoff time for a particular session. The clinic is staffed by multiple physicians, and each incoming request must be handled immediately by a receptionist.
+Appointment requests for a clinic session arrive one at a time until a
+cut-off; each request must be assigned at once to an eligible physician or
+rejected. This is the first case study of the paper on expert design for
+imitation learning, and the problem of Gawas, Legrain and Rousseau (2024).
 
-At each call-in, the receptionist must decide to **accept** or **reject** the request. If accepted, the receptionist must also decide **which physician** to assign to the patient among the patient’s eligible physicians. Decisions must be made online under uncertainty about future arrivals.
-##scheduler_env
-## Physicians
-Let $\mathcal{P} = \{1, \dots, P\}$ denote the set of available physicians. Each physician $p \in \mathcal{P}$ has:
-- a regular session time $T$ (in minutes),
-- a maximum appointment capacity $L_p$.
+## Problem
 
-## Patients (Call-ins)
-Each patient request $n$ is characterized by:
-- an eligible physician set $\mathcal{P}_n \subseteq \mathcal{P}$,
-- a preferred physician $p_n \in \mathcal{P}_n$,
-- an estimated service duration $d_n \in \mathbb{R}_{+}$ (known at call-in time),
-- a priority class $r_n \in \{1,2\}$, where:
-  - class 1: high priority,
-  - class 2: regular priority.
+- **Physicians:** P = 4 physicians, each with a regular session of 240
+  minutes plus at most 60 minutes of overtime (300 minutes in total; overtime
+  has no cost in the study) and at most 20 appointments.
+- **Requests:** each request has a priority (1: urgent, 2: regular), a
+  duration known at call time, a preferred physician and a set of eligible
+  physicians.
+- **Arrivals:** the numbers of priority-1 and priority-2 requests follow
+  N(25, 5) and N(75, 12). The arrival order follows Beta-distributed scores,
+  Beta(3, 1) for priority 1 and Beta(1, 1) for priority 2, so urgent patients
+  tend to call late.
+- **Costs:** rejecting a priority-1 (priority-2) request costs 200 (50).
+  Assigning a request to an eligible physician other than the preferred one
+  costs 10% of its rejection cost.
 
-## Costs / Penalties
-If the receptionist rejects patient $n$, a rejection penalty is incurred:
-$c^{\text{pref}}_{r_n}$.
-
-If the receptionist accepts patient $n$ but assigns them to an eligible
-non-preferred physician, a preference penalty is incurred:
-$c^{\text{pref}}_{r_n}$, where $r_n \in \{1,2\}$.
-
-## Key Challenge (Uncertainty and Trade-offs)
-The number and composition of future requests are uncertain. This creates a trade-off between:
-- accepting lower-priority patients now versus saving capacity for potentially higher-priority patients later,
-- assigning a patient to a non-preferred physician (incurring a penalty) versus rejecting them (incurring a potentially larger penalty),
-- preserving feasibility for future patients who may have limited eligibility, since poor early assignments can force future rejections.
-
-## Decision Process View
-This problem can be modeled as a **stochastic dynamic program (SDP)**:
-- each decision epoch corresponds to an arriving patient call-in,
-- the system state includes remaining physician capacities (and implicitly the remaining booking horizon),
-- actions are to assign the patient to a physician $p \in \mathcal{P}_n$ or to reject the patient.
-
-The objective is to choose decisions over the booking horizon to **minimize the total expected penalties** from patient rejections and non-preferred assignments, subject to physician capacity constraints.
-
+The difficulty is to keep capacity for the late urgent requests. The objective
+is the total cost of an episode, which is minimised.
 
 ## Layout
 
 | Path | Content |
 |---|---|
 | `udagger_ppa/instance.py` | instance parameters, episode seeds and model arguments |
-| `udagger_ppa/simulator.py` | simulator (with the deterministic MIP of the original study) |
+| `udagger_ppa/simulator.py` | simulator (with the deterministic assignment MIP) |
 | `udagger_ppa/solver.py` | two-stage stochastic MIP and hindsight optimum |
 | `udagger_ppa/features.py` | state features of the learned policy |
 | `udagger_ppa/experts.py` | greedy, full-information, deterministic, aggregated, two-stage |
 | `udagger_ppa/problem.py` | the PPA problem and its episodes for `udagger` |
 | `udagger_ppa/cli.py` | the application for the generic command line (`udagger.cli`) |
-| `udagger_ppa/_scheduler.py`, `_stochastic.py` | original simulator and MIP classes (`OCS.py`, `SOCS.py`) |
+| `udagger_ppa/_scheduler.py`, `_stochastic.py` | simulator and MIP classes of the original study (Pyomo + Gurobi) |
 | `slurm/make_grid.py` | experiment grids (run with the shared `../slurm/array.sh`) |
 | `analysis/make_results.py` | tables and figures (with `udagger.analysis`) |
-| `tests/` | unit tests, including equivalence with the original code |
-| `legacy/` | original scripts of the study (see below) |
+| `tests/` | unit tests |
 
 ## Installation
 
@@ -78,7 +59,7 @@ command line, options and output files are the same as in the AdWords example
 
 All commands are run from `ppa/`. Results go to `--out`, or to `$PPA_OUT` if
 `--out` is not given. Episode `n` of the test and validation sets has seed
-`5001 + n` and `6001 + n`, as in the original evaluation.
+`5001 + n` and `6001 + n`.
 
 ```bash
 # Hindsight optimum on the validation and test episodes.
@@ -90,8 +71,9 @@ python -m udagger_ppa.cli --workers 10 learn --expert saa --scenarios 5 \
     --seed 0 --mode dagger
 ```
 
-To run the full study on Rorqual, from the repository root with the shared
-job script (results in `$UDAGGER_OUT/ppa`, by default `~/scratch/udagger/ppa`):
+To run the full study on a SLURM cluster, from the repository root with the
+shared job script (results in `$UDAGGER_OUT/ppa`, by default
+`~/scratch/udagger/ppa`; give your allocation with `--account`):
 
 ```bash
 python ppa/slurm/make_grid.py
@@ -101,36 +83,18 @@ sbatch --array=1-14 --time=3-00:00:00 --mem-per-cpu=4G slurm/array.sh ppa ppa/sl
 sbatch --array=1-57 --time=7-00:00:00 --mem-per-cpu=4G slurm/array.sh ppa ppa/slurm/learn_grid.txt
 ```
 
-## Original scripts (`legacy/`)
+Then run `python analysis/make_results.py RESULTS_DIR PAPER_DIR`.
 
-`legacy/` keeps the scripts of the original study, which produced the
-published results: `Learn_Main.py` (DAgger and data collection), `NN.py`
-(network and training), `Learn_Sim.py` and `Evaluate.py` (evaluation),
-`bash/` (original job scripts), and `slurm/` + `analysis/` (the CPAIOR rerun:
-`slurm/run.sh`, `slurm/make_grid.py`, `analysis/make_results.py`). They
-import the simulator and the MIPs from `udagger_ppa` through the
-compatibility modules `legacy/OCS.py` and `legacy/SOCS.py`, and are run from
-`legacy/`, e.g.:
+## Original code
 
-```bash
-cd ppa/legacy
-python Learn_Main.py --runs 10 --new 1 --scenarios 5 --stoch 1 --um 1 \
-    --learn_iter 400 --time_limit 30 --mipgap 0.02
-python Learn_Sim.py --sims 1000 --model 399 --new 1 --scenarios 5 --stoch 1 \
-    --um 1 --learn_iter 400 --runs 10 --time_limit 30 --mipgap 0.02
-```
-
-The job scripts of `legacy/bash/` run the scripts from `legacy/`, so that
-their relative paths (`../data`, `../Loutput`, ...) point to `ppa/` as
-before. `bash/batch_solve.sh` ran the command-line demo of `OCS.py`, which
-was not kept.
-
-`tests/test_ppa.py` checks that the features and the expert decisions
-of `udagger_ppa` are identical to those of the original `IO_learning` on the
-same states and seeds.
+The scripts of the original study (`src/Learn_Main.py`, `src/NN.py`,
+`src/Learn_Sim.py`, ...) are available at the git tag `ppa`. The simulator and
+MIP classes are reused here unchanged. The features and the expert decisions
+of `udagger_ppa` were checked to be identical to those of the original code
+on the same states and seeds. The hindsight optima of the validation episodes
+are identical as well (mean 1299.2).
 
 ## Citation
 
-If you use our repository in your research, please cite the following paper:
-
-> [Imitation Learning for Combinatorial Optimisation under Uncertainty](https://arxiv.org/abs/) - Prakash Gawas, Antoine Legrain, Louis-Martin Rousseau (2024)
+> P. Gawas, A. Legrain, L.-M. Rousseau. Imitation Learning for Combinatorial
+> Optimisation under Uncertainty (2024).

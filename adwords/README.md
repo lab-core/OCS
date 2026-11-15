@@ -68,9 +68,9 @@ python -m udagger_adwords.cli --workers 32 learn --expert saa --scenarios 5 \
     --seed 0 --mode dagger
 ```
 
-To run the full study on Rorqual (account `def-legraina_cpu`), from the
-repository root with the shared job script (results in
-`$UDAGGER_OUT/adwords`, by default `~/scratch/udagger/adwords`):
+To run the full study on a SLURM cluster, from the repository root with the
+shared job script (results in `$UDAGGER_OUT/adwords`, by default
+`~/scratch/udagger/adwords`; give your allocation with `--account`):
 
 ```bash
 python adwords/slurm/make_grid.py

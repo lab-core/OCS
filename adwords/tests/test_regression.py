@@ -1,10 +1,10 @@
 """Regression test: results identical to the code before the udagger refactor.
 
-The reference values were produced by the AdWords code before it was moved
-onto ``udagger`` (commit 55d3250, ``ilco_adwords.cli``) with the options
-below. The same commands must give the same per-episode test revenues, for
-both action rules of the learned policy, for the hindsight optimum and for an
-expert used online. The values depend on PyTorch and Gurobi giving the same
+The reference values were produced by the AdWords code before the learning
+code was moved to the ``udagger`` package, with the options below. The same
+commands must give the same per-episode test revenues, for both action rules
+of the learned policy, for the hindsight optimum and for an expert used
+online. The values depend on PyTorch and Gurobi giving the same
 floating-point results; they were recorded on macOS (arm64).
 """
 
