@@ -20,32 +20,38 @@ learning.
 The difficulty is to keep enough budget of the premium-capable advertisers for
 the late premium queries. The offline problem only depends on the number of
 queries of each type, so every MIP expert solves a compact type-count model
-(`ilco_adwords/solver.py`).
+(`udagger_adwords/solver.py`).
 
 ## Layout
 
 | Path | Content |
 |---|---|
-| `ilco_adwords/market.py` | instance generator and episode sampling |
-| `ilco_adwords/env.py` | simulator and Bayesian posterior on the remaining queries |
-| `ilco_adwords/solver.py` | type-count MIPs (Gurobi) and hindsight optimum |
-| `ilco_adwords/experts.py` | greedy, MSVV, full-information, deterministic, aggregated, two-stage |
-| `ilco_adwords/policy.py` | features, MLP training (PyTorch), NumPy inference |
-| `ilco_adwords/rollout.py` | parallel episode rollouts with β-mixing |
-| `ilco_adwords/cli.py` | `hindsight`, `expert` and `learn` commands |
-| `slurm/` | job-array scripts and experiment grids |
-| `analysis/make_results.py` | tables and figures of the paper |
+| `udagger_adwords/instance.py` | market generator, episode sampling and seeds |
+| `udagger_adwords/simulator.py` | simulator and Bayesian posterior on the remaining queries |
+| `udagger_adwords/solver.py` | type-count MIPs (Gurobi) and hindsight optimum |
+| `udagger_adwords/features.py` | state features of the learned policy |
+| `udagger_adwords/experts.py` | greedy, MSVV, full-information, deterministic, aggregated, two-stage |
+| `udagger_adwords/problem.py` | the AdWords problem and its episodes for `udagger` |
+| `udagger_adwords/cli.py` | the application for the generic command line (`udagger.cli`) |
+| `slurm/make_grid.py` | experiment grids (run with the shared `../slurm/array.sh`) |
+| `analysis/make_results.py` | tables and figures of the paper (with `udagger.analysis`) |
 | `scripts/calibrate.py` | calibration of the budget tightness |
-| `tests/` | unit tests |
+| `tests/` | unit tests and a regression test against the pre-refactor results |
 
 ## Installation
 
-Python 3.11+ and a Gurobi licence are required:
+Python 3.11+ and a Gurobi licence are required. The learning code is the
+`udagger` package at the repository root:
 
 ```bash
+pip install -e ..            # udagger
 pip install -r requirements.txt
 PYTHONPATH=$PWD pytest -q tests
 ```
+
+Without installing `udagger`, use `PYTHONPATH=$PWD/..:$PWD` instead. The
+command line, options and output files are the same as in the PPA example
+(`../ppa`).
 
 ## Reproducing the experiments
 
@@ -54,22 +60,25 @@ All commands are run from `adwords/`. Results go to `--out`, or to
 
 ```bash
 # Hindsight optimum on the validation and test episodes.
-python -m ilco_adwords.cli --workers 32 hindsight
+python -m udagger_adwords.cli --workers 32 hindsight
 # One expert used online on the test episodes.
-python -m ilco_adwords.cli --workers 32 expert --expert saa --scenarios 30
+python -m udagger_adwords.cli --workers 32 expert --expert saa --scenarios 30
 # One learning run.
-python -m ilco_adwords.cli --workers 32 learn --expert saa --scenarios 5 \
+python -m udagger_adwords.cli --workers 32 learn --expert saa --scenarios 5 \
     --seed 0 --mode dagger
 ```
 
-To run the full study on Rorqual (account `def-legraina_cpu`):
+To run the full study on a SLURM cluster, from the repository root with the
+shared job script (results in `$UDAGGER_OUT/adwords`, by default
+`~/scratch/udagger/adwords`; give your allocation with `--account`):
 
 ```bash
-python slurm/make_grid.py
-sbatch --array=1-14 --time=3:00:00 slurm/array.sh slurm/expert_grid.txt
+python adwords/slurm/make_grid.py
+sbatch --array=1-15 --time=3:00:00 slurm/array.sh adwords adwords/slurm/expert_grid.txt
 # One-shot runs are the odd lines and DAgger runs the even lines (then 101-115).
-sbatch --array=1-99:2 --time=3:00:00 slurm/array.sh slurm/learn_grid.txt
-sbatch --array=2-100:2,101-115 --time=24:00:00 slurm/array.sh slurm/learn_grid.txt
+sbatch --array=1-99:2 --time=3:00:00 slurm/array.sh adwords adwords/slurm/learn_grid.txt
+sbatch --array=2-100:2,101-115 --time=3-00:00:00 slurm/array.sh adwords adwords/slurm/learn_grid.txt
+sbatch --array=1-62 --time=3:00:00 slurm/array.sh adwords adwords/slurm/std_grid.txt
 ```
 
 Then run `python analysis/make_results.py RESULTS_DIR PAPER_DIR`. It writes
@@ -77,7 +86,7 @@ Then run `python analysis/make_results.py RESULTS_DIR PAPER_DIR`. It writes
 
 ## Experimental protocol
 
-The defaults of `ilco_adwords.cli` follow the physician study (`../ppa`).
+The defaults of `udagger_adwords.cli` follow the physician study (`../ppa`).
 
 - **Episodes:** 4,000 expert-labelled training episodes, about 149 queries
   each (≈600,000 labelled states).
@@ -117,4 +126,7 @@ revenue as a fraction of the hindsight optimum:
 | **1.2** | **0.7** | 0.885 | 0.904 | 0.950 | 0.960 | 0.989 | **0.085** |
 | 1.2 | 1.0 | 0.886 | 0.903 | 0.944 | 0.951 | 0.978 | 0.076 |
 
-The selected setting (1.2, 0.7) is the default of `ilco_adwords.cli`.
+The selected setting (1.2, 0.7) is the default of `udagger_adwords.cli`. The
+experts of this table use optimal MIPs, a 10 s limit and majority votes
+(`exact`). With the settings of the study (`protocol`: 2% gap, 30 s, sampled
+votes), the same setting is selected (score 0.077, next best 0.070).
