@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from udagger import checkpoint as ckpt
 from udagger.learner import LearnConfig, learn, mean_objective
 from udagger.problem import Expert
 from udagger.rollout import EpisodeResult, Runner
@@ -50,6 +51,12 @@ def add_learn_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--patience", type=int, default=None)
     parser.add_argument("--save-data", action="store_true")
+    parser.add_argument(
+        "--checkpoint-every",
+        type=int,
+        default=10,
+        help="iterations between checkpoints (0: none); a rerun resumes",
+    )
 
 
 def learn_config(args: argparse.Namespace) -> LearnConfig:
@@ -148,7 +155,8 @@ def run_learning(
     out.mkdir(parents=True, exist_ok=True)
     # The pool workers are idle while the network trains.
     torch.set_num_threads(max(1, runner.workers))
-    start = time.perf_counter()
+    every = getattr(args, "checkpoint_every", 0)
+    checkpoint_dir = out / "checkpoint" if every > 0 else None
     res = learn(
         runner,
         expert,
@@ -156,7 +164,11 @@ def run_learning(
         train_seeds=train_seeds,
         valid_seeds=valid_seeds,
         log=lambda line: print(line, flush=True),
+        checkpoint_dir=checkpoint_dir,
+        checkpoint_every=max(1, every),
+        context=json.loads(json.dumps(meta, default=str)),
     )
+    learned = time.perf_counter()
     by_rule: dict[str, list[EpisodeResult]] = {}
     for policy in (res.policy, res.policy.with_sampling(not res.policy.sample)):
         by_rule["sample" if policy.sample else "mode"] = runner.run(
@@ -173,7 +185,7 @@ def run_learning(
         f"test_{objective}_mode": mean_objective(by_rule["mode"]),
         f"test_{objective}_sample": mean_objective(by_rule["sample"]),
         "label_seconds": res.label_seconds,
-        "wall_seconds": time.perf_counter() - start,
+        "wall_seconds": res.wall_seconds + time.perf_counter() - learned,
         "curve": res.curve,
     }
     write_episodes(out / "test.csv", by_rule[args.policy_action], objective, summary)
@@ -186,5 +198,7 @@ def run_learning(
         np.savez_compressed(
             out / "labels.npz", **{k: v for k, v in res.data.items() if k not in skip}
         )
+    if checkpoint_dir is not None:
+        ckpt.remove(checkpoint_dir)  # the run is complete
     print(json.dumps({k: v for k, v in summary.items() if k != "curve"}))
     return summary

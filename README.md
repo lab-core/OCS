@@ -57,6 +57,7 @@ The package provides the rest:
 | `experiment.py` | learning and expert runs: options, test of both action rules, output files |
 | `cli.py` | generic command line: an application declares an `Application` (options, problem, expert, seeds, hindsight) |
 | `grid.py` | job lines of the experiment grids |
+| `checkpoint.py` | checkpoints of learning runs (resume after a time limit) |
 | `analysis.py` | regret to the hindsight optimum, main/MIP-gap/paired-test tables, learning curves |
 
 ```python
@@ -82,6 +83,16 @@ The experts compared in both applications follow the same taxonomy:
 - two-stage stochastic (sample average approximation over K futures).
 
 They are compared at several MIP gaps, with and without interaction (DAgger).
+
+## Checkpoints
+
+`learn` saves a checkpoint every `--checkpoint-every` iterations (default 10;
+one-shot: every 10 blocks of `--per-iteration` labelled episodes) in
+`<run>/checkpoint/`. Running the same command again, for instance
+resubmitting a job that hit its time limit, resumes from it. A resumed run
+gives the same results as an uninterrupted one (every random draw depends on
+the episode seed or the iteration), and a checkpoint of a run with other
+settings is refused. The folder is removed when the run completes.
 
 ## Installation and tests
 

@@ -225,6 +225,7 @@ def test_cli_and_analysis(tmp_path: Path) -> None:
         learn = ["learn", "--expert", "oracle", "--mode", mode, "--episodes", "20"]
         main(app, "", [*out, *learn, "--epochs", "20", "--save-data"])
     run = tmp_path / "oracle_gap0.02_dagger_s0"
+    assert not (run / "checkpoint").exists()  # removed once the run is complete
     assert {p.name for p in run.iterdir()} >= {
         "test.csv",
         "test_mode.csv",

@@ -138,7 +138,14 @@ def cmd_learn(app: Application, args: argparse.Namespace) -> None:
 
 # Options that do not change the experiment (where results go, parallelism,
 # whether labels are saved): ignored when comparing runs.
-_NOT_EXPERIMENT = ("func", "workers", "out", "out_suffix", "save_data")
+_NOT_EXPERIMENT = (
+    "func",
+    "workers",
+    "out",
+    "out_suffix",
+    "save_data",
+    "checkpoint_every",
+)
 
 
 def _check_overwrite(summary: Path, options: dict) -> None:
