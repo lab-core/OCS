@@ -70,27 +70,29 @@ COLORS = {
     "saa15": "#5fb85a",
     "saa30": "#1b7a2e",
 }
+# Physician study on its test episodes (original runs, DAgger policy chosen on
+# validation); used when tables/ppa_main.csv is absent.
 PPA_ONESHOT = {
-    "full": 2137.4,
-    "det": 1961.9,
-    "agg5": 1948.4,
-    "agg15": 1946.9,
-    "agg30": 1942.2,
-    "saa5": 1758.3,
-    "saa15": 1695.1,
-    "saa30": 1678.5,
+    "full": 2198.7,
+    "det": 2023.1,
+    "agg5": 1988.7,
+    "agg15": 1990.6,
+    "agg30": 1991.9,
+    "saa5": 1802.2,
+    "saa15": 1734.8,
+    "saa30": 1721.0,
 }
 PPA_DAGGER = {
-    "full": 1957.0,
-    "det": 1943.3,
-    "agg5": 1934.8,
-    "agg15": 1937.2,
-    "agg30": 1939.1,
-    "saa5": 1748.2,
-    "saa15": 1693.5,
-    "saa30": 1674.2,
+    "full": 1998.8,
+    "det": 1997.5,
+    "agg5": 1986.0,
+    "agg15": 1978.3,
+    "agg30": 1979.5,
+    "saa5": 1794.2,
+    "saa15": 1733.0,
+    "saa30": 1716.6,
 }
-PPA_ONLINE = {"greedy": 3380.1, "full": 1299.2, "saa30": 1647.2}
+PPA_ONLINE = {"greedy": 3437.3, "full": 1331.1, "saa30": 1691.0}
 # Protocol of the physician study: experts stopped at a 2% MIP gap, and the
 # two-stage baseline with 30 scenarios solved to a 0.2% gap.
 BASE_GAP = 0.02
@@ -121,6 +123,7 @@ STUDY = Study(
         (("saa30", "dagger"), ("saa5", "oneshot")),
     ),
     curve_experts=("full", "det", "agg30", "saa5", "saa15", "saa30"),
+    replicates=5,
 )
 
 
@@ -225,8 +228,8 @@ def fig_teacher(table: pd.DataFrame, out: Path) -> None:
     offset = 0.3 if regret_units else 15.0  # label above its line
     for key, style, text in (
         ("full", ":", "hindsight"),
-        # From ppa_main.csv: the expert at the 2% gap; fallback: 0.2% baseline.
-        ("saa30", "--", "2S-30 online" + (" (2% gap)" if ppa_csv.exists() else "")),
+        # The baseline of the paper: two-stage expert at a 0.2% gap.
+        ("saa30", "--", "2S-30 online"),
     ):
         if key in ppa_online:
             ax.axhline(ppa_online[key], color=COLORS[key], ls=style, lw=1)

@@ -51,6 +51,9 @@ class Study:
             baseline row).
         comparisons: Pairs of configurations compared by :func:`paired_tests`.
         curve_experts: Experts drawn by :func:`fig_curves`.
+        replicates: Planned replicates per configuration. When set, the main
+            table marks cells with fewer replicates (superscript count) and
+            missing cells (``\\pending``, to be defined in the document).
     """
 
     prefix: str
@@ -66,6 +69,7 @@ class Study:
     baseline_gap: float | None = 0.002
     comparisons: Sequence[tuple[Config, Config]] = field(default_factory=tuple)
     curve_experts: Sequence[str] = ()
+    replicates: int | None = None
 
 
 def regret(value: pd.Series, opt: pd.Series, maximize: bool) -> pd.Series:
@@ -177,6 +181,17 @@ def fmt(mean: float, sd: float | None = None) -> str:
     return f"{mean:.2f} {{\\scriptsize$\\pm${sd:.2f}}}"
 
 
+def _cell(study: Study, row: pd.DataFrame) -> str:
+    """Mean and sd of a configuration, marked when replicates are missing."""
+    if row.empty:
+        return r"\pending" if study.replicates else "--"
+    text = fmt(row["regret"].iloc[0], row["sd"].iloc[0])
+    n = int(row["n"].iloc[0])
+    if study.replicates and n < study.replicates:
+        text += rf"\textsuperscript{{({n})}}"
+    return text
+
+
 def main_table(
     study: Study, experts: pd.DataFrame, runs: pd.DataFrame, out: Path
 ) -> pd.DataFrame:
@@ -220,8 +235,8 @@ def main_table(
             {"expert": name, "online": online, "oneshot": o_m, "dagger": d_m}
             | {"hours": hours}
         )
-        o_s = fmt(o_m, one["sd"].iloc[0]) if not one.empty else "--"
-        d_s = fmt(d_m, dag["sd"].iloc[0]) if not dag.empty else "--"
+        o_s = _cell(study, one)
+        d_s = _cell(study, dag)
         online_s = f"{online:.2f}" if not np.isnan(online) else "--"
         gain_s = "--" if np.isnan(o_m - d_m) else f"{o_m - d_m:+.2f}"
         hours_s = "--" if np.isnan(hours) else f"{hours:.1f}"
