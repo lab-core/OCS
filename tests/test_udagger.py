@@ -433,6 +433,59 @@ def test_resume_ignores_options_used_after_learning(
     assert not (run / "checkpoint").exists()
 
 
+def test_interrupted_dagger_leaves_partial_results(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A killed DAgger run leaves the best policy and milestone tests so far.
+
+    A milestone equals the result of a run with that smaller budget, and the
+    milestones are kept across a resume and in the final ``test.json``.
+    """
+    import json
+
+    from udagger.cli import main
+    from udagger.rollout import Runner as RunnerClass
+
+    app = _toy_app()
+    base = ["--out", str(tmp_path), "--n-valid", "2", "--n-test", "3"]
+    learn_args = ["learn", "--expert", "oracle", "--mode", "dagger", "--epochs", "2"]
+    learn_args += ["--checkpoint-every", "1", "--test-every", "10"]
+    original = RunnerClass.run
+    calls = {"collect": 0}
+
+    def crash_at_third(self: RunnerClass, seeds: list[int], **kw: object) -> list:
+        if kw.get("collect"):
+            calls["collect"] += 1
+            if calls["collect"] > 2:
+                raise JobEnded
+        return original(self, seeds, **kw)
+
+    monkeypatch.setattr(RunnerClass, "run", crash_at_third)
+    with pytest.raises(JobEnded):
+        main(app, "", [*base, *learn_args, "--episodes", "40"])
+    run = tmp_path / "oracle_gap0.02_dagger_s0"
+    partial = json.loads((run / "partial.json").read_text())
+    assert partial["episodes_done"] == 20
+    assert [m["episodes"] for m in partial["milestones"]] == [10, 20]
+    assert (run / "policy_partial.npz").exists()
+
+    monkeypatch.setattr(RunnerClass, "run", original)
+    main(app, "", [*base, *learn_args, "--episodes", "40"])
+    summary = json.loads((run / "test.json").read_text())
+    assert [m["episodes"] for m in summary["milestones"]] == [10, 20, 30]
+    assert summary["milestones"][:2] == partial["milestones"]
+    assert not (run / "partial.json").exists()
+    assert not (run / "policy_partial.npz").exists()
+
+    main(app, "", [*base, *learn_args, "--episodes", "20", "--tag", "_short"])
+    short_run = tmp_path / "oracle_gap0.02_dagger_s0_short"
+    short = json.loads((short_run / "test.json").read_text())
+    milestone = summary["milestones"][1]
+    assert short["test_score"] == milestone["test_score"]
+    for key in ("iteration", "episodes", "val_objective"):
+        assert short["best"][key] == milestone["best"][key]
+
+
 class BadExpert(OracleExpert):
     """Expert that labels an infeasible action at odd epochs."""
 

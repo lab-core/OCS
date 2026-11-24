@@ -133,6 +133,7 @@ def learn(
     checkpoint_dir: Path | None = None,
     checkpoint_every: int = 10,
     context: dict | None = None,
+    on_progress: Callable[[NumpyPolicy, dict, list[dict], int], None] | None = None,
 ) -> LearnResult:
     """Learn a policy from an expert.
 
@@ -150,6 +151,12 @@ def learn(
             ``per_iteration`` labelled episodes) between two checkpoints.
         context: Other settings of the run (e.g. the instance options); a
             checkpoint is only resumed by a run with the same context.
+        on_progress: DAgger: called every ``checkpoint_every`` iterations
+            (except the last one) with the best policy so far, its curve row,
+            the curve and the number of training episodes used, so that a
+            run stopped by a time limit still leaves usable results. The best
+            policy after ``n`` episodes is the one that a run with a budget
+            of ``n`` episodes returns.
 
     Returns:
         The best policy on validation and the learning history.
@@ -283,6 +290,8 @@ def learn(
                 checkpoint(policy, it + 1, (it + 1) * per_it, stats)
             if (it + 1) % checkpoint_every == 0 and not last:
                 save(it + 1, policy)
+                if on_progress is not None and "policy" in best:
+                    on_progress(best["policy"], best["row"], curve, (it + 1) * per_it)
 
     if "policy" not in best:
         raise ValueError(

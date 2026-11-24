@@ -164,6 +164,7 @@ _NOT_EXPERIMENT = (
     "out_suffix",
     "save_data",
     "checkpoint_every",
+    "test_every",
     "force",
 )
 # Options only used after learning (test episodes, folder name).
