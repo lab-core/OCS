@@ -5,13 +5,25 @@ training episodes, DAgger with 10 episodes per iteration, MIPs stopped at a
 2% gap or 30 s, and a two-stage baseline with 30 scenarios at a 0.2% gap.
 The uncertainty study only changes the spread of the number of premium
 queries (10 in the main study); its levels were fixed before any result.
+
+Two grids were added after the first results. ``short``: the myopic and
+full-information experts reach their best DAgger policy within 520 episodes,
+so their DAgger runs are repeated with 1,000 episodes (``--tag _ep1000``).
+``vote``: aggregated experts that execute the majority of their votes instead
+of drawing one (``--tag _majority``), and the usual expert with 100 scenarios.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from udagger.grid import expert_lines, gap_lines, learn_lines, write_grids
+from udagger.grid import (
+    expert_lines,
+    gap_lines,
+    learn_lines,
+    vote_lines,
+    write_grids,
+)
 
 EXPERTS = [
     ("greedy", 1),
@@ -32,6 +44,9 @@ EXTRA_GAPS = (0.01, 0.05, 0.1)
 BASELINE_GAP = 0.002
 PREMIUM_STDS = (5, 15)
 STD_EXPERTS = [("greedy", 1), ("full", 1), ("det", 1), ("agg", 5), ("saa", 5)]
+SHORT_EXPERTS = [("greedy", 1), ("msvv", 1), ("full", 1)]
+SHORT_EPISODES = 1000
+VOTE_SCENARIOS = (5, 15, 30, 100)
 
 
 def main() -> None:
@@ -49,7 +64,22 @@ def main() -> None:
         std += learn_lines(
             STD_EXPERTS, SEEDS, EPISODES, ("oneshot",), save_seed=None, prefix=prefix
         )
-    write_grids(Path(__file__).parent, learn=learn, expert=experts, std=std)
+    short = learn_lines(
+        SHORT_EXPERTS,
+        SEEDS,
+        SHORT_EPISODES,
+        ("dagger",),
+        save_seed=None,
+        suffix=" --tag _ep1000",
+    )
+    write_grids(
+        Path(__file__).parent,
+        learn=learn,
+        expert=experts,
+        std=std,
+        short=short,
+        vote=vote_lines(VOTE_SCENARIOS),
+    )
 
 
 if __name__ == "__main__":

@@ -22,6 +22,7 @@ def learn_lines(
     modes: Sequence[str] = ("oneshot", "dagger"),
     save_seed: int | None = 0,
     prefix: str = "",
+    suffix: str = "",
 ) -> list[str]:
     """One learning run per expert, replicate and mode.
 
@@ -32,13 +33,16 @@ def learn_lines(
         modes: Learning modes.
         save_seed: Replicate whose labels are saved (``--save-data``).
         prefix: Global options put before the sub-command.
+        suffix: Options appended to every line (e.g. ``" --tag _ep1000"``).
     """
     lines = []
     for kind, k in experts:
         for seed in seeds:
             save = " --save-data" if seed == save_seed else ""
             base = f"{prefix}learn --expert {kind} --scenarios {k} --seed {seed}"
-            lines += [f"{base} --mode {m} --episodes {episodes}{save}" for m in modes]
+            lines += [
+                f"{base} --mode {m} --episodes {episodes}{save}{suffix}" for m in modes
+            ]
     return lines
 
 
@@ -74,6 +78,18 @@ def expert_lines(
             f"{prefix}expert --expert {kind} --scenarios {k} --gap {g}" for g in gaps
         ]
     return lines
+
+
+def vote_lines(scenarios: Sequence[int], prefix: str = "") -> list[str]:
+    """Aggregated experts that execute the majority of their votes.
+
+    One line per number of scenarios (``--tag _majority``), then the usual
+    aggregated expert (sampled vote) with the largest number, for comparison.
+    """
+    experts = [("agg", k) for k in scenarios]
+    lines = expert_lines(experts, prefix=prefix)
+    lines = [f"{x} --no-sample-vote --tag _majority" for x in lines]
+    return lines + expert_lines([("agg", max(scenarios))], prefix=prefix)
 
 
 def write_grids(folder: Path, **grids: list[str]) -> None:

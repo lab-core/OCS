@@ -1,14 +1,22 @@
 """Write the PPA experiment grids for ``slurm/array.sh ppa GRID``.
 
 Same protocol as ``adwords/make_grid.py`` (defaults of the command
-line), with 3 replicates as in the rerun of the physician study.
+line), with 3 replicates as in the rerun of the physician study. The
+``vote`` grid (aggregated experts with a majority vote) was added after the
+first results, as for AdWords.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from udagger.grid import expert_lines, gap_lines, learn_lines, write_grids
+from udagger.grid import (
+    expert_lines,
+    gap_lines,
+    learn_lines,
+    vote_lines,
+    write_grids,
+)
 
 EXPERTS = [
     ("full", 1),
@@ -25,6 +33,7 @@ EPISODES = 4000
 GAP_EXPERT = ("saa", 30)
 EXTRA_GAPS = (0.01, 0.05, 0.1)
 BASELINE_GAP = 0.002
+VOTE_SCENARIOS = (5, 15, 30, 100)
 
 
 def main() -> None:
@@ -34,7 +43,12 @@ def main() -> None:
     experts = ["hindsight"] + expert_lines(
         [("greedy", 1), *EXPERTS], GAP_EXPERT, (BASELINE_GAP, *EXTRA_GAPS)
     )
-    write_grids(Path(__file__).parent, learn=learn, expert=experts)
+    write_grids(
+        Path(__file__).parent,
+        learn=learn,
+        expert=experts,
+        vote=vote_lines(VOTE_SCENARIOS),
+    )
 
 
 if __name__ == "__main__":

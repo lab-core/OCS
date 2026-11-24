@@ -124,6 +124,10 @@ STUDY = Study(
     ),
     curve_experts=("full", "det", "agg30", "saa5", "saa15", "saa30"),
     replicates=5,
+    # The myopic and full-information experts reach their best DAgger policy
+    # within 520 episodes, so their DAgger runs use 1,000 episodes (with the
+    # same results as 4,000 wherever both were run).
+    dagger_tags={"greedy": "_ep1000", "msvv": "_ep1000", "full": "_ep1000"},
 )
 
 
@@ -143,7 +147,9 @@ def std_table(results: Path, out: Path) -> pd.DataFrame | None:
         if not (folder / "hindsight_test.csv").exists():
             continue
         experts, runs, _ = load(folder, STUDY)
-        runs = runs[runs["tag"] == ""]  # --tag variants are not replicates
+        # --tag variants (e.g. a majority vote) are not the experts of the study.
+        experts = experts[experts["tag"] == ""]
+        runs = runs[runs["tag"] == ""]
         for name in STD_EXPERTS:
             on = experts[(experts.expert == name) & np.isclose(experts.gap, BASE_GAP)]
             one = runs[

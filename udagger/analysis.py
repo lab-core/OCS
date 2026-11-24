@@ -26,7 +26,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402  (the backend must be set first)
 
 MODE_LABEL = {"oneshot": "one-shot", "dagger": "DAgger"}
-EXPERT_COLUMNS = ["expert", "gap", "regret", "regret_se", "sec_per_decision"]
+EXPERT_COLUMNS = ["expert", "gap", "tag", "regret", "regret_se", "sec_per_decision"]
 CURVE_COLUMNS = ["expert", "gap", "mode", "seed", "tag", "episodes", "val_regret"]
 CURVE_COLUMNS += ["label_hours"]
 Config = tuple[str, str]  # (expert name, mode)
@@ -54,6 +54,9 @@ class Study:
         replicates: Planned replicates per configuration. When set, the main
             table marks cells with fewer replicates (superscript count) and
             missing cells (``\\pending``, to be defined in the document).
+        dagger_tags: ``--tag`` of the DAgger runs reported for an expert,
+            when they differ from the main runs (e.g. ``"_ep1000"`` for a
+            smaller budget); other experts use the untagged runs.
     """
 
     prefix: str
@@ -70,6 +73,11 @@ class Study:
     comparisons: Sequence[tuple[Config, Config]] = field(default_factory=tuple)
     curve_experts: Sequence[str] = ()
     replicates: int | None = None
+    dagger_tags: dict[str, str] = field(default_factory=dict)
+
+    def main_tag(self, expert: str, mode: str) -> str:
+        """Tag of the runs of a configuration reported in the tables."""
+        return self.dagger_tags.get(expert, "") if mode == "dagger" else ""
 
 
 def regret(value: pd.Series, opt: pd.Series, maximize: bool) -> pd.Series:
@@ -109,6 +117,7 @@ def load(
             {
                 "expert": meta["expert"],
                 "gap": meta["gap"],
+                "tag": meta.get("options", {}).get("tag", ""),
                 "regret": reg.mean(),
                 "regret_se": reg.std() / np.sqrt(len(reg)),
                 "sec_per_decision": meta["solve_seconds"] / meta["decisions"],
@@ -309,9 +318,11 @@ def episode_regret(
     """Per-test-episode regret of a configuration, averaged over replicates."""
     opt = _hindsight(results, "test")
     per_seed = []
+    tag = study.main_tag(expert, mode)
     for path in sorted(results.glob(f"{expert}_gap{gap:g}_{mode}_s*/test.csv")):
-        if not path.parent.name.rsplit("_s", 1)[-1].isdigit():
-            continue  # a --tag variant
+        suffix = path.parent.name.rsplit("_s", 1)[-1]
+        if not (suffix.endswith(tag) and suffix[: len(suffix) - len(tag)].isdigit()):
+            continue  # another --tag variant
         df = pd.read_csv(path).set_index("seed")
         per_seed.append(regret(df[study.objective], opt.loc[df.index], study.maximize))
     if not per_seed:
@@ -414,8 +425,11 @@ def standard_outputs(study: Study, results: Path, out: Path) -> pd.DataFrame:
     (out / "tables").mkdir(parents=True, exist_ok=True)
     (out / "figs").mkdir(parents=True, exist_ok=True)
     experts, runs, curves = load(results, study)
-    # Runs saved under a --tag are variants, not replicates of the main study.
-    runs = runs[runs["tag"] == ""]
+    # Runs saved under a --tag are variants, not replicates of the main study,
+    # except the DAgger runs that the study reports for some experts.
+    experts = experts[experts["tag"] == ""]
+    main = [study.main_tag(e, m) for e, m in zip(runs["expert"], runs["mode"])]
+    runs = runs[runs["tag"] == pd.Series(main, index=runs.index)]
     curves = curves[curves["tag"] == ""]
     print(summary(experts, runs))
     table = main_table(study, experts, runs, out)

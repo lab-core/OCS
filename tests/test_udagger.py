@@ -259,6 +259,26 @@ def test_cli_and_analysis(tmp_path: Path) -> None:
     assert (tmp_path / "paper" / "tables" / "toy_tests.tex").exists()
     assert (tmp_path / "paper" / "figs" / "toy_curves.pdf").exists()
 
+    # A study can report the tagged DAgger runs of an expert instead, and
+    # tagged expert variants (e.g. another vote rule) stay out of the tables.
+    main(app, "", [*out, "expert", "--expert", "oracle", "--tag", "_v"])
+    from dataclasses import replace
+
+    tagged = replace(study, prefix="toy_tagged", dagger_tags={"oracle": "_v"})
+    v_run = tmp_path / "oracle_gap0.02_dagger_s0_v"
+    v_regret = episode_regret(tagged, tmp_path, "oracle", "dagger", 0.02)
+    expected = episode_regret(study, tmp_path, "oracle", "dagger", 0.02)
+    assert len(v_regret) == 5
+    import pandas as pd
+
+    v_scores = pd.read_csv(v_run / "test.csv")["score"]
+    assert v_regret.mean() == pytest.approx(100.0 * (1.0 - v_scores.mean() / 10.0))
+    table_v = standard_outputs(tagged, tmp_path, tmp_path / "paper")
+    assert table_v.loc[0, "dagger"] == pytest.approx(v_regret.mean())
+    assert table_v.loc[0, "oneshot"] == pytest.approx(table.loc[0, "oneshot"])
+    assert table_v.loc[0, "online"] == pytest.approx(0.0)
+    assert len(expected) == 5
+
 
 def test_grid_lines() -> None:
     """Grid lines follow the command-line syntax."""

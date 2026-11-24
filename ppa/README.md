@@ -81,7 +81,12 @@ python ppa/make_grid.py
 export UDAGGER_WORKERS=16
 sbatch --array=1-14 --time=3-00:00:00 --mem-per-cpu=4G slurm/array.sh ppa ppa/expert_grid.txt
 sbatch --array=1-57 --time=7-00:00:00 --mem-per-cpu=4G slurm/array.sh ppa ppa/learn_grid.txt
+# Aggregated experts with a majority vote.
+sbatch --array=1-5 --time=3-00:00:00 --mem-per-cpu=4G slurm/array.sh ppa ppa/vote_grid.txt
 ```
+
+Runs resume from their checkpoint when submitted again, so the 7-day jobs
+can also run as 3-day jobs chained with `--dependency=afterany:JOBID`.
 
 Then run `python make_results.py RESULTS_DIR PAPER_DIR`.
 

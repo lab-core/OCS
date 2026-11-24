@@ -79,7 +79,16 @@ sbatch --array=1-15 --time=3:00:00 slurm/array.sh adwords adwords/expert_grid.tx
 sbatch --array=1-99:2 --time=3:00:00 slurm/array.sh adwords adwords/learn_grid.txt
 sbatch --array=2-100:2,101-115 --time=3-00:00:00 slurm/array.sh adwords adwords/learn_grid.txt
 sbatch --array=1-62 --time=3:00:00 slurm/array.sh adwords adwords/std_grid.txt
+# DAgger of the myopic and full-information experts with 1,000 episodes.
+sbatch --array=1-15 --time=12:00:00 slurm/array.sh adwords adwords/short_grid.txt
+# Aggregated experts with a majority vote.
+sbatch --array=1-5 --time=12:00:00 slurm/array.sh adwords adwords/vote_grid.txt
 ```
+
+A DAgger run checkpoints every 10 iterations and writes `partial.json` and
+`policy_partial.npz` (best policy so far, tested every 500 episodes), so a
+run stopped by the time limit leaves usable results; submitting it again
+resumes it, and completed runs are skipped.
 
 Then run `python make_results.py RESULTS_DIR PAPER_DIR`. It writes
 `tables/adwords_*.tex` and `figs/*.pdf` into the paper folder.
