@@ -201,60 +201,110 @@ def _cell(study: Study, row: pd.DataFrame) -> str:
     return text
 
 
+def _stats(values: pd.Series) -> pd.DataFrame:
+    """One-row frame with the mean, sd and count of replicate regrets."""
+    values = values.dropna()
+    if values.empty:
+        return pd.DataFrame(columns=["regret", "sd", "n"])
+    sd = values.std() if len(values) > 1 else np.nan
+    return pd.DataFrame({"regret": [values.mean()], "sd": [sd], "n": [len(values)]})
+
+
+def write_main_table(
+    study: Study,
+    cells: dict[str, dict[str, object]],
+    out: Path,
+    footer: str | Sequence[str] | None = None,
+) -> pd.DataFrame:
+    """Write ``<prefix>_main.tex`` (and ``.csv``) from per-expert cells.
+
+    Every application uses this layout, so that all results read the same
+    way: regret of the expert used online, regret of the policies learned
+    with one-shot cloning and DAgger (sampled actions) and of the one-shot
+    policy taking its most likely action, DAgger gain and time.
+
+    Args:
+        study: Description of the study (order, labels, replicates).
+        cells: For each expert, ``online`` (float), ``oneshot``, ``dagger``
+            and ``mode`` (frames from :func:`_stats`) and ``hours`` (float).
+        out: Folder that receives ``tables/``.
+        footer: Optional LaTeX text of last rows spanning the table (one
+            row per string).
+
+    Returns:
+        The numbers of the table, one row per expert.
+    """
+    rows = []
+    lines = [
+        r"\begin{tabular}{@{}lrrrrrr@{}}",
+        r"\toprule",
+        r"& Expert & \multicolumn{3}{c}{Learned policy regret (\%)} & Gain & Time \\",
+        r"\cmidrule(lr){3-5}",
+        r"Expert & online (\%) & one-shot & DAgger & most likely & (pp) & (h) \\",
+        r"\midrule",
+    ]
+    empty = _stats(pd.Series(dtype=float))
+    for name in study.order:
+        if name not in cells:
+            continue
+        c = cells[name]
+        one, dag, mode = (c.get(k, empty) for k in ("oneshot", "dagger", "mode"))
+        online, hours = float(c.get("online", np.nan)), float(c.get("hours", np.nan))
+        o_m = one["regret"].iloc[0] if not one.empty else np.nan
+        d_m = dag["regret"].iloc[0] if not dag.empty else np.nan
+        m_m = mode["regret"].iloc[0] if not mode.empty else np.nan
+        rows.append(
+            {"expert": name, "online": online, "oneshot": o_m, "dagger": d_m}
+            | {"mode": m_m, "hours": hours}
+        )
+        online_s = "--" if np.isnan(online) else f"{online:.2f}"
+        mode_s = "--" if mode.empty else fmt(m_m, mode["sd"].iloc[0])
+        gain_s = "--" if np.isnan(o_m - d_m) else f"{o_m - d_m:+.2f}"
+        hours_s = "--" if np.isnan(hours) else f"{hours:.1f}"
+        lines.append(
+            f"{study.labels[name]} & {online_s} & {_cell(study, one)} & "
+            f"{_cell(study, dag)} & {mode_s} & {gain_s} & {hours_s} \\\\"
+        )
+        if name in study.group_ends:
+            lines.append(r"\addlinespace")
+    if footer:
+        lines.append(r"\midrule")
+        for text in [footer] if isinstance(footer, str) else footer:
+            lines.append(rf"\multicolumn{{7}}{{@{{}}l}}{{{text}}} \\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    tables = out / "tables"
+    tables.mkdir(parents=True, exist_ok=True)
+    (tables / f"{study.prefix}_main.tex").write_text("\n".join(lines) + "\n")
+    table = pd.DataFrame(rows)
+    table["metric"] = "regret"  # percent
+    table.to_csv(tables / f"{study.prefix}_main.csv", index=False)
+    return table
+
+
 def main_table(
     study: Study, experts: pd.DataFrame, runs: pd.DataFrame, out: Path
 ) -> pd.DataFrame:
     """Write ``<prefix>_main.tex`` (and ``.csv``) and return its numbers.
 
-    Columns: regret of the expert used online, of the policies learned with
-    one-shot cloning and DAgger (mean and standard deviation over
-    replicates), DAgger gain and labelling time.
+    See :func:`write_main_table` for the layout; the most likely action is
+    that of the one-shot policies and the time is the DAgger labelling time.
     """
     base_runs = runs[np.isclose(runs["gap"], study.base_gap)]
     base_exp = experts[np.isclose(experts["gap"], study.base_gap)].set_index("expert")
-    agg = (
-        base_runs.groupby(["expert", "mode"])
-        .agg(
-            regret=("regret", "mean"),
-            sd=("regret", "std"),
-            hours=("label_hours", "mean"),
-            n=("seed", "count"),
-        )
-        .reset_index()
-    )
-    rows = []
-    lines = [
-        r"\begin{tabular}{@{}lrrrrr@{}}",
-        r"\toprule",
-        r"& Expert & \multicolumn{2}{c}{Learned policy regret (\%)} & Gain & Label \\",
-        r"\cmidrule(lr){3-4}",
-        r"Expert & online (\%) & one-shot & DAgger & (pp) & time (h) \\",
-        r"\midrule",
-    ]
+    cells: dict[str, dict[str, object]] = {}
     for name in study.order:
-        one = agg[(agg.expert == name) & (agg["mode"] == "oneshot")]
-        dag = agg[(agg.expert == name) & (agg["mode"] == "dagger")]
+        one = base_runs[(base_runs.expert == name) & (base_runs["mode"] == "oneshot")]
+        dag = base_runs[(base_runs.expert == name) & (base_runs["mode"] == "dagger")]
         if one.empty and dag.empty:
             continue
-        online = base_exp["regret"].get(name, np.nan)
-        o_m = one["regret"].iloc[0] if not one.empty else np.nan
-        d_m = dag["regret"].iloc[0] if not dag.empty else np.nan
-        hours = dag["hours"].iloc[0] if not dag.empty else np.nan
-        rows.append(
-            {"expert": name, "online": online, "oneshot": o_m, "dagger": d_m}
-            | {"hours": hours}
-        )
-        o_s = _cell(study, one)
-        d_s = _cell(study, dag)
-        online_s = f"{online:.2f}" if not np.isnan(online) else "--"
-        gain_s = "--" if np.isnan(o_m - d_m) else f"{o_m - d_m:+.2f}"
-        hours_s = "--" if np.isnan(hours) else f"{hours:.1f}"
-        lines.append(
-            f"{study.labels[name]} & {online_s} & {o_s} & {d_s} & "
-            f"{gain_s} & {hours_s} \\\\"
-        )
-        if name in study.group_ends:
-            lines.append(r"\addlinespace")
+        cells[name] = {
+            "online": base_exp["regret"].get(name, np.nan),
+            "oneshot": _stats(one["regret"]),
+            "dagger": _stats(dag["regret"]),
+            "mode": _stats(one["regret_mode"]),
+            "hours": dag["label_hours"].mean() if not dag.empty else np.nan,
+        }
+    footer = None
     if study.baseline_gap is not None:
         base = experts[
             (experts.expert == study.gap_expert)
@@ -262,19 +312,12 @@ def main_table(
         ]
         if not base.empty:
             label = study.labels[study.gap_expert].split(" ", 1)[-1]
-            lines += [
-                r"\midrule",
-                rf"\multicolumn{{6}}{{@{{}}l}}{{\emph{{Two-stage baseline:}} {label} "
-                f"online at a {100 * study.baseline_gap:g}\\% gap, "
-                f"{base['regret'].iloc[0]:.2f}\\% regret}} \\\\",
-            ]
-    lines += [r"\bottomrule", r"\end{tabular}"]
-    tables = out / "tables"
-    (tables / f"{study.prefix}_main.tex").write_text("\n".join(lines) + "\n")
-    table = pd.DataFrame(rows)
-    table["metric"] = "regret"  # percent; the original PPA analysis wrote costs
-    table.to_csv(tables / f"{study.prefix}_main.csv", index=False)
-    return table
+            footer = (
+                rf"\emph{{Two-stage baseline:}} {label} online at a "
+                f"{100 * study.baseline_gap:g}\\% gap, "
+                f"{base['regret'].iloc[0]:.2f}\\% regret"
+            )
+    return write_main_table(study, cells, out, footer)
 
 
 def gap_table(
