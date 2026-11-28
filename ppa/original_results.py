@@ -112,8 +112,10 @@ def paired(first: pd.Series, second: pd.Series) -> str:
     diff = first - second.loc[first.index]
     half = 1.96 * diff.std() / np.sqrt(len(diff))
     p = stats.wilcoxon(diff).pvalue
-    return f"{diff.mean():+.2f} [{diff.mean() - half:+.2f}, {diff.mean() + half:+.2f}]"\
+    return (
+        f"{diff.mean():+.2f} [{diff.mean() - half:+.2f}, {diff.mean() + half:+.2f}]"
         f" p={p:.2g}"
+    )
 
 
 def main() -> None:
@@ -147,8 +149,10 @@ def main() -> None:
         print(f"  {a} vs {b}: {paired(runs[a[1]][a[0]], runs[b[1]][b[0]])}")
     for name in ("agg30", "saa30"):
         print(f"  {name} online vs dagger: {paired(online[name], dagger[name])}")
-    print(f"  saa30 0.2% online vs dagger: "
-          f"{paired(online['saa30_baseline'], dagger['saa30'])}")
+    print(
+        f"  saa30 0.2% online vs dagger: "
+        f"{paired(online['saa30_baseline'], dagger['saa30'])}"
+    )
 
 
 if __name__ == "__main__":
